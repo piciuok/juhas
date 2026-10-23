@@ -17,6 +17,10 @@ func init() {
 	// `poll` without --dry-run acts like one tray cycle: ask, run, wait.
 	pollActions = func(cfg *config.Config, snap *queue.Snapshot) error {
 		store := state.Open()
+		if store.TrayRunning() {
+			// two runners would fight over the same jobs and dialogs
+			return fmt.Errorf("the Juhas tray is running — use \"Check now\" in its menu (or poll --dry-run)")
+		}
 		_ = store.RecoverInterrupted()
 		r := &review.Runner{Cfg: cfg, Store: store, OnDone: func(j state.Job) {
 			if j.Status == state.Done {

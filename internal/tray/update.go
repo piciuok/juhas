@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"juhas/internal/platform"
+	"juhas/internal/state"
 	"juhas/internal/update"
 )
 
@@ -135,7 +136,11 @@ func (a *App) installUpdate() {
 		fail(errors.New("no newer release to install"))
 		return
 	}
-	for a.reviewsActive() {
+	// no new reviews from here on: one started now would be cut off by the restart
+	a.holdReviews(true)
+	failHeld := fail
+	fail = func(err error) { a.holdReviews(false); failHeld(err) }
+	for a.reviewsActive() || a.questionsOpen() {
 		select {
 		case <-a.quit:
 			return
@@ -161,6 +166,13 @@ func (a *App) installUpdate() {
 		fail(err)
 		return
 	}
+	for a.reviewsActive() || a.questionsOpen() { // one may have slipped in before the hold
+		select {
+		case <-a.quit:
+			return
+		case <-time.After(15 * time.Second):
+		}
+	}
 	a.logger.Printf("updated %s → %s, restarting", version, tag)
 	platform.Notify(platform.Notification{Title: "Juhas updated to " + tag, Message: "Restarting…", Open: rel.URL})
 	time.Sleep(time.Second)            // let the notification go out
@@ -168,6 +180,30 @@ func (a *App) installUpdate() {
 	if err := update.Restart(exe, "tray"); err != nil {
 		fail(fmt.Errorf("installed, but the restart failed (%v) — quit and start Juhas again", err))
 	}
+}
+
+func (a *App) holdReviews(on bool) {
+	a.mu.Lock()
+	r := a.runner
+	a.mu.Unlock()
+	if r != nil {
+		r.Hold(on)
+	}
+}
+
+// questionsOpen: a "Review it?" dialog is waiting for an answer, which a
+// restart would lose.
+func (a *App) questionsOpen() bool {
+	st, err := a.store.Read()
+	if err != nil {
+		return false
+	}
+	for _, j := range st.Jobs {
+		if j.Status == state.Asked {
+			return true
+		}
+	}
+	return false
 }
 
 // reviewsActive: a review is running or queued.

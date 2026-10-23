@@ -38,6 +38,7 @@ type Job struct {
 	Error      string    `json:"error,omitempty"`
 	Method     string    `json:"method,omitempty"` // skill:<name> | builtin | claude-code-review
 	PID        int       `json:"pid,omitempty"`
+	Owner      int       `json:"owner,omitempty"` // pid of the juhas process that queued/runs it
 	StartedAt  time.Time `json:"started_at,omitempty"`
 	FinishedAt time.Time `json:"finished_at,omitempty"`
 }
@@ -144,23 +145,40 @@ func (s *Store) Update(fn func(*State) error) error {
 	return os.Rename(tmp, s.path)
 }
 
-// RecoverInterrupted marks jobs left running/queued by a dead process as
-// failed, and unanswered questions as pending.
+// RecoverInterrupted runs when the tray starts. Jobs queued or running in a
+// process that is gone are marked failed, and an agent such a process left
+// behind is stopped: its output went to the old process, so it cannot be
+// collected. Jobs owned by another live juhas (e.g. \`juhas review\`) are
+// left alone. Unanswered questions become pending.
 func (s *Store) RecoverInterrupted() error {
+	self := os.Getpid()
 	return s.Update(func(st *State) error {
 		for _, j := range st.Jobs {
 			if j.Status == Asked {
 				j.Status = Pending // the dialog died with the previous process
 				continue
 			}
-			if (j.Status == Running || j.Status == Queued) && !alive(j.PID) {
-				j.Status = Failed
-				j.Error = "interrupted (the app was closed or the computer went to sleep)"
-				j.PID = 0
+			if j.Status != Running && j.Status != Queued {
+				continue
 			}
+			if j.Owner != 0 && j.Owner != self && alive(j.Owner) {
+				continue // still someone's job
+			}
+			if j.PID > 0 {
+				StopOrphan(j.PID)
+			}
+			j.Status = Failed
+			j.Error = "interrupted (Juhas was restarted or closed, or the computer slept) — run it again"
+			j.PID, j.Owner = 0, 0
 		}
 		return nil
 	})
+}
+
+// LiveOwner reports whether j is queued or running in another juhas process
+// that is still alive.
+func (j *Job) LiveOwner() bool {
+	return j != nil && (j.Status == Running || j.Status == Queued) && j.Owner != 0 && j.Owner != os.Getpid() && alive(j.Owner)
 }
 
 func alive(pid int) bool {

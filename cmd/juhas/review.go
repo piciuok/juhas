@@ -5,7 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"juhas/internal/config"
 	"juhas/internal/doctor"
@@ -135,6 +137,10 @@ func cmdReview(args []string) error {
 	if err != nil {
 		return err
 	}
+	store := state.Open()
+	if st, err := store.Read(); err == nil && st.Job(it.URL).LiveOwner() {
+		return fmt.Errorf("%s %s is already being reviewed by juhas (pid %d) — see the Panel", it.Repo, it.Ref(), st.Job(it.URL).Owner)
+	}
 	dir := repoDir(ctx, cfg, it.Repo)
 	s, err := cfg.Effective(it.Repo)
 	if err != nil {
@@ -147,9 +153,12 @@ func cmdReview(args []string) error {
 	fmt.Printf("%s %s — %s\n  dir:     %s\n  method:  %s\n  log:     %s\n\nReviewing (this can take several minutes), live progress:\n\n",
 		it.Repo, it.Ref(), it.Title, config.Contract(dir), m, review.LogPath(state.Open(), it.URL))
 
-	store := state.Open()
 	var final state.Job
 	r := &review.Runner{Cfg: cfg, Store: store, OnDone: func(j state.Job) { final = j }, Echo: os.Stdout}
+	// Ctrl-C stops the agent too (it runs in its own process group)
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	go func() { <-sig; fmt.Println("\nstopping the review…"); r.Stop() }()
 	r.Enqueue(it, dir, *agent)
 	r.Wait()
 	if final.Status != state.Done {

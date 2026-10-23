@@ -34,8 +34,20 @@ type Runner struct {
 	cancels map[string]context.CancelFunc
 	running map[string]forge.Item // in progress
 	waiting []forge.Item          // queued, in order
+	held    bool                  // no new reviews (an update is about to restart the app)
 	wg      sync.WaitGroup
 }
+
+// Hold stops (or resumes) accepting new reviews; running ones go on.
+func (r *Runner) Hold(on bool) {
+	r.init()
+	r.mu.Lock()
+	r.held = on
+	r.mu.Unlock()
+}
+
+// ErrElsewhere: another juhas process is already reviewing it.
+var ErrElsewhere = fmt.Errorf("already being reviewed by another juhas process")
 
 func (r *Runner) init() {
 	r.once.Do(func() {
@@ -114,11 +126,15 @@ func (r *Runner) Busy(url string) bool {
 }
 
 // Enqueue schedules a review of it in dir with agent ("" = the repo's
-// default). It is a no-op if one is in flight.
+// default). It is a no-op if one is in flight here, while held, or when
+// another juhas process runs it (both would write the same log and brief).
 func (r *Runner) Enqueue(it forge.Item, dir, agent string) {
 	r.init()
+	if st, err := r.Store.Read(); err == nil && st.Job(it.URL).LiveOwner() {
+		return
+	}
 	r.mu.Lock()
-	if _, busy := r.cancels[it.URL]; busy {
+	if _, busy := r.cancels[it.URL]; busy || r.held {
 		r.mu.Unlock()
 		return
 	}
@@ -133,6 +149,7 @@ func (r *Runner) Enqueue(it forge.Item, dir, agent string) {
 		j.Status = state.Queued
 		j.Error = ""
 		j.Log = logPath
+		j.Owner = os.Getpid()
 	})
 	r.wg.Add(1)
 	go func() {
@@ -185,7 +202,7 @@ func (r *Runner) run(ctx context.Context, it forge.Item, dir, agent string) {
 	}, r.Echo, agent)
 	var final state.Job
 	r.update(it, func(j *state.Job) {
-		j.PID = 0
+		j.PID, j.Owner = 0, 0
 		j.FinishedAt = time.Now()
 		j.Method = res.Label()
 		if err != nil {

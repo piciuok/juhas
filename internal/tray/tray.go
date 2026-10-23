@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -104,6 +105,11 @@ func Run(opt Options) error {
 	}
 	_ = store.RecoverInterrupted()
 	a.logger.Printf("start (pid %d, %s)", os.Getpid(), runtime.GOOS)
+	// logout / launchctl stop / kill: quit through onExit so running agents
+	// are stopped instead of left behind without anyone reading their output
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+	go func() { <-sig; systray.Quit() }()
 	for _, m := range migrated {
 		a.logger.Printf("migration: %s", m)
 	}
@@ -116,7 +122,7 @@ func singleInstance(store *state.Store) (*os.File, error) {
 	if err := os.MkdirAll(filepath.Dir(store.Path()), 0o755); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(filepath.Join(filepath.Dir(store.Path()), "tray.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := os.OpenFile(store.TrayLockPath(), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, err
 	}
