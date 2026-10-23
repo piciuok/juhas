@@ -48,6 +48,8 @@ section.repo { background: var(--panel); border: 1px solid var(--line); border-r
 .st.queued { color: var(--muted); border-style: dashed; }
 .st.done { color: var(--ok); border-color: var(--ok); }
 .st.failed { color: var(--err); border-color: var(--err); }
+.st.stale { color: var(--warn); border-color: var(--warn); font-weight: 600; }
+.meta .stale { color: var(--warn); }
 @keyframes pulse { 50% { opacity: .45; } }
 .title { min-width: 0; }
 .title a { color: var(--text); text-decoration: none; font-weight: 500; }
@@ -153,7 +155,7 @@ function entryRow(e) {
       const again = e.status === "done" || e.status === "failed";
       actions.push(h("button", { class: i === 0 ? "primary" : "", title: a.method,
         onclick: (ev) => { ev.target.disabled = true; act("analyze", { url: e.url, agent: a.name }); } },
-        (i === 0 ? (again ? "▶ Review again" : "▶ Review") : "with") + " " + a.label));
+        (i === 0 ? (e.stale ? "⟳ Review the new commits" : again ? "▶ Review again" : "▶ Review") : "with") + " " + a.label));
     });
     if (logURL) actions.push(h("a", { class: "btn", href: logURL, target: "_blank" }, "Run log"));
   }
@@ -171,14 +173,15 @@ function entryRow(e) {
 
   const who = [e.requested && "reviewer", e.assigned && "assignee"].filter(Boolean).join(", ");
   return h("div", { class: "row" + (e.urgent ? " urgent" : "") + (e.status === "skipped" ? " skipped" : "") },
-    h("span", { class: "st " + (e.busy && e.status !== "queued" ? "running" : e.status) },
-      e.status === "done" && e.proposal && (e.proposal.pending || e.proposal.accepted) ? "📝 awaiting decision" : (STATUS[e.status] || e.status)),
+    h("span", { class: "st " + (e.busy && e.status !== "queued" ? "running" : e.stale && !e.busy ? "stale" : e.status), title: e.stale ? "The author pushed after your review — the brief is about an older commit" : null },
+      e.stale && !e.busy ? "⟳ new commits"
+        : e.status === "done" && e.proposal && (e.proposal.pending || e.proposal.accepted) ? "📝 awaiting decision" : (STATUS[e.status] || e.status)),
     h("div", { class: "title" },
       h("div", {}, h("span", { class: "ref" }, e.ref), h("a", { href: e.url, target: "_blank", rel: "noopener" }, e.title)),
       h("div", { class: "meta" },
         h("span", {}, e.author), who ? h("span", {}, who) : null, files(e.files),
         e.urgent ? h("span", { class: "why" }, "⚡ " + e.urgent_why + (e.acked ? " (acknowledged)" : "")) : null,
-        e.stale ? h("span", {}, "new commits since the brief") : null,
+        e.stale ? h("span", { class: "stale" }, "⟳ pushed after your review" + (e.proposal && e.proposal.posted ? ` (you published ${e.proposal.posted}/${e.proposal.total})` : "")) : null,
         e.method ? h("span", {}, e.method) : null,
         e.status === "failed" && e.error ? h("span", { class: "err", title: e.error }, e.error.slice(0, 120)) : null,
         e.status === "noclone" ? h("span", { class: "err" }, "no local clone — add one in Settings") : null)),
