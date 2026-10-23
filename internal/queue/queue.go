@@ -270,13 +270,11 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 	return snap
 }
 
-// logins are "host login" of every account (cached by the forges).
+// logins are "host login" of every account, watched or not: a PR authored
+// as any of them is mine (cached by the forges).
 func (c *Collector) logins(ctx context.Context) map[string]bool {
 	out := map[string]bool{}
-	for k, f := range c.Forges {
-		if c.Unwatched[k] {
-			continue
-		}
+	for _, f := range c.Forges {
 		if me, err := f.Me(ctx); err == nil && me != "" {
 			out[strings.ToLower(f.Host())+" "+strings.ToLower(me)] = true
 		}

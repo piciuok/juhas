@@ -57,14 +57,14 @@ func prepareCodex(ctx context.Context, it forge.Item, dir, id string, log io.Wri
 
 	wt := filepath.Join(cacheDir(), "worktrees", id)
 	git := func(args ...string) (string, error) {
-		cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-		out, err := cmd.CombinedOutput()
-		return strings.TrimSpace(string(out)), err
+		return gitIn(ctx, dir, args...)
 	}
 	ws.cleanup = func() {
-		_, _ = git("worktree", "remove", "--force", wt)
-		_, _ = git("worktree", "prune")
+		// the run's context is done after a timeout or cancel; clean up anyway
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+		defer cancel()
+		_, _ = gitIn(ctx, dir, "worktree", "remove", "--force", wt)
+		_, _ = gitIn(ctx, dir, "worktree", "prune")
 		_ = os.RemoveAll(ws.CtxDir)
 	}
 	_, _ = git("worktree", "remove", "--force", wt) // leftover from an interrupted run
@@ -359,4 +359,11 @@ func unwrapShell(cmd string) string {
 		}
 	}
 	return cmd
+}
+
+func gitIn(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	out, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(out)), err
 }
