@@ -312,6 +312,9 @@ func Run(ctx context.Context, cfg *config.Config, s config.Settings, it forge.It
 		return res, err
 	}
 	res.Brief = filepath.Join(briefs, BriefName(it, agent, time.Now()))
+	// the previous run's proposal must not stay publishable if this one
+	// gives none (its comments are still in the previous brief)
+	_ = os.Remove(ProposalPath(logPath))
 
 	logf, err := os.Create(logPath)
 	if err != nil {

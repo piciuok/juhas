@@ -66,10 +66,13 @@ func ProposalPromptRules(commentsLang string) string {
 // ExtractProposal splits the agent's answer into the brief and the proposal.
 // When there is no (valid) block the brief is returned unchanged.
 func ExtractProposal(text string) (string, *Proposal, error) {
-	m := proposalBlock.FindStringSubmatchIndex(text)
-	if m == nil {
+	// the last block: the agent's own comes at the very end, while one quoted
+	// from PR content (a prompt-injection attempt) would come earlier
+	all := proposalBlock.FindAllStringSubmatchIndex(text, -1)
+	if all == nil {
 		return text, nil, nil
 	}
+	m := all[len(all)-1]
 	raw := text[m[2]:m[3]]
 	brief := strings.TrimSpace(text[:m[0]] + text[m[1]:])
 	var in struct {

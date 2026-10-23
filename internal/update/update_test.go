@@ -116,3 +116,14 @@ func TestDownloadVerifyReplace(t *testing.T) {
 		t.Error("tampered archive must be rejected")
 	}
 }
+
+func TestPrereleaseOrder(t *testing.T) {
+	for _, c := range [][2]string{{"rc.9", "rc.10"}, {"alpha", "beta"}, {"rc.1", "rc.1.1"}, {"1", "alpha"}} {
+		if !prereleaseLess(c[0], c[1]) || prereleaseLess(c[1], c[0]) {
+			t.Errorf("%s < %s", c[0], c[1])
+		}
+	}
+	if newer, err := Newer("v1.0.0-rc.9", "v1.0.0-rc.10"); err != nil || !newer {
+		t.Errorf("rc.10 newer than rc.9: %v %v", newer, err)
+	}
+}

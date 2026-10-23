@@ -104,7 +104,31 @@ func (a Version) Less(b Version) bool {
 	case b.Pre == "":
 		return true
 	}
-	return a.Pre < b.Pre
+	return prereleaseLess(a.Pre, b.Pre)
+}
+
+// prereleaseLess orders pre-release tags the semver way: dot-separated
+// identifiers, numeric ones compared as numbers (rc.9 < rc.10), numeric
+// before alphanumeric, a shorter list first when it is a prefix.
+func prereleaseLess(a, b string) bool {
+	x, y := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(x) && i < len(y); i++ {
+		if x[i] == y[i] {
+			continue
+		}
+		nx, ex := strconv.Atoi(x[i])
+		ny, ey := strconv.Atoi(y[i])
+		switch {
+		case ex == nil && ey == nil:
+			return nx < ny
+		case ex == nil:
+			return true
+		case ey == nil:
+			return false
+		}
+		return x[i] < y[i]
+	}
+	return len(x) < len(y)
 }
 
 // Newer reports whether tag is a newer release than current.
