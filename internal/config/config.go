@@ -4,13 +4,17 @@ package config
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"juhas/internal/forge"
@@ -59,19 +63,27 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 
 // parseDuration accepts Go durations plus a "d" suffix for days ("2d").
 func parseDuration(s string) (time.Duration, error) {
+	var v time.Duration
 	if strings.HasSuffix(s, "d") {
-		var n float64
-		if _, err := fmt.Sscanf(strings.TrimSuffix(s, "d"), "%g", &n); err != nil {
-			return 0, fmt.Errorf("duration %q: %w", s, err)
+		n, err := strconv.ParseFloat(strings.TrimSuffix(s, "d"), 64)
+		if err != nil {
+			return 0, fmt.Errorf("duration %q: use e.g. 2d, 36h or 90m", s)
 		}
-		return time.Duration(n * float64(24*time.Hour)), nil
+		v = time.Duration(n * float64(24*time.Hour))
+	} else {
+		var err error
+		if v, err = time.ParseDuration(s); err != nil {
+			return 0, fmt.Errorf("duration %q: use e.g. 2d, 36h or 90m", s)
+		}
 	}
-	v, err := time.ParseDuration(s)
-	if err != nil {
-		return 0, fmt.Errorf("duration %q: %w", s, err)
+	if v < 0 {
+		return 0, fmt.Errorf("duration %q: must not be negative", s)
 	}
 	return v, nil
 }
+
+// MinPollInterval keeps the forge APIs (and rate limits) safe from a typo.
+const MinPollInterval = 30 * time.Second
 
 // Host is one account on a GitHub/GitLab host. Without User it is the CLI's
 // login (gh: the active account). User picks one of several gh accounts on
@@ -414,6 +426,20 @@ func (c *Config) Validate() error {
 		}
 		seen[k] = true
 	}
+	defaultLogin := map[string]int{} // glab keeps one login per host and config dir
+	for _, h := range c.GitLab {
+		if h.ConfigDir == "" {
+			defaultLogin[strings.ToLower(h.Host)]++
+		}
+	}
+	for host, n := range defaultLogin {
+		if n > 1 {
+			return fmt.Errorf("gitlab %s: %d accounts use glab's default login — glab has one login per host, give the others their own config_dir", host, n)
+		}
+	}
+	if c.PollInterval.D() > 0 && c.PollInterval.D() < MinPollInterval {
+		return fmt.Errorf("poll_interval %s: at least %s", c.PollInterval.D(), MinPollInterval)
+	}
 	if _, err := c.settings(nil); err != nil {
 		return fmt.Errorf("defaults: %w", err)
 	}
@@ -583,13 +609,99 @@ func (c *Config) Save(path string) error {
 		return err
 	}
 	buf.WriteByte('\n')
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, buf.Bytes(), 0o600); err != nil {
+	if err := writeAtomic(path, buf.Bytes()); err != nil {
 		return err
 	}
 	c.path = path
-	return os.Rename(tmp, path)
+	return nil
+}
+
+// writeAtomic replaces path through a unique temp file in the same dir, so
+// two writers never mix their bytes.
+func writeAtomic(path string, b []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name()) // no-op after the rename
+	if _, err := f.Write(b); err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(f.Name(), 0o600)
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
+}
+
+// lock serialises writers of the config file (the tray, Settings, the CLI).
+func lock(path string) (func(), error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
+}
+
+// Modify loads the config fresh under the write lock, applies fn and saves
+// it, so a change never overwrites one made meanwhile by someone else.
+func Modify(path string, fn func(*Config) error) error {
+	unlock, err := lock(path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	c, err := Load(path)
+	if err != nil {
+		return err
+	}
+	if err := fn(c); err != nil {
+		return err
+	}
+	return c.Save(path)
+}
+
+// Version identifies a config file's content (for edit conflicts).
+func Version(b []byte) string {
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:8])
+}
+
+// ErrChanged: the file changed since the editor loaded it.
+var ErrChanged = errors.New("the config changed on disk since Settings loaded it")
+
+// WriteRaw saves an edited config file. When base is set and the file on
+// disk is no longer that version, it refuses with ErrChanged. The previous
+// file is kept as .bak.
+func WriteRaw(path string, raw []byte, base string) (string, error) {
+	unlock, err := lock(path)
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+	if old, err := os.ReadFile(path); err == nil {
+		if base != "" && Version(old) != base {
+			return "", ErrChanged
+		}
+		_ = writeAtomic(path+".bak", old)
+	}
+	if err := writeAtomic(path, raw); err != nil {
+		return "", err
+	}
+	return Version(raw), nil
 }

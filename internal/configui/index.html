@@ -200,7 +200,7 @@ const SETTINGS = [
 
 // ---- model ---------------------------------------------------------------
 
-let model = null;      // the whole config object (edited in place)
+let model = null, version = "";      // the whole config object (edited in place)
 let builtin = null;
 let serverEff = {};    // effective settings from the last validation
 let clones = [];
@@ -721,7 +721,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("#picker
 async function load() {
   try {
     const r = await api("/api/config");
-    model = r.raw; model.repos ||= {};
+    model = r.raw; model.repos ||= {}; version = r.version || "";
     builtin = r.builtin; serverEff = r.effective || {}; clones = r.clones || [];
     $("#path").textContent = r.path + (r.exists ? "" : " (new file)");
     dirty = !r.exists;
@@ -735,8 +735,8 @@ async function load() {
 $("#btnSave").addEventListener("click", async () => {
   if (!(await validate())) return;
   try {
-    const r = await api("/api/save", { raw: model });
-    dirty = false; $("#btnSave").disabled = true;
+    const r = await api("/api/save", { raw: model, base: version });
+    version = r.version || ""; dirty = false; $("#btnSave").disabled = true;
     setStatus("saved " + r.saved + " — the app picks it up on the next check", "ok");
     const c = await api("/api/config"); clones = c.clones || []; serverEff = c.effective || {}; renderNav();
   } catch (e) { showError(e.message); setStatus("not saved", "err"); }

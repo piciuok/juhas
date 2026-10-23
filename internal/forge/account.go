@@ -94,6 +94,16 @@ func ItemAccount(it Item) Account {
 	return AccountFor(it.Platform, host, it.Account)
 }
 
+// PublishAccount is the account to post as: exactly the one that found the
+// PR/MR. Falling back to another login would post under someone else's name.
+func PublishAccount(it Item) (Account, error) {
+	a := ItemAccount(it)
+	if it.Account != "" && !strings.EqualFold(a.Key(), it.Account) {
+		return a, fmt.Errorf("account %s, which found this PR/MR, is no longer in the config — add it back (Settings → Accounts) to publish", it.Account)
+	}
+	return a, nil
+}
+
 // Env is what gh/glab need in their environment to act as this account
 // (nil for the CLI's default login).
 func (a Account) Env(ctx context.Context) ([]string, error) {

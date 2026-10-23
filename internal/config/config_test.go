@@ -155,3 +155,40 @@ func TestDefaultRoundTrips(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDurationsAndAccountsValidated(t *testing.T) {
+	for _, s := range []string{"-3m", "2xd", "-1d", "soon"} {
+		if _, err := parseDuration(s); err == nil {
+			t.Errorf("%q accepted", s)
+		}
+	}
+	if d, err := parseDuration("1.5d"); err != nil || d != 36*time.Hour {
+		t.Errorf("1.5d = %v %v", d, err)
+	}
+	bad := []string{
+		`{"poll_interval": "5s"}`,
+		`{"gitlab": [{"host": "gl.x"}, {"host": "gl.x", "user": "work"}]}`,
+	}
+	for _, b := range bad {
+		if _, err := Parse([]byte(b), "c.json"); err == nil {
+			t.Errorf("accepted: %s", b)
+		}
+	}
+	if _, err := Parse([]byte(`{"gitlab": [{"host": "gl.x"}, {"host": "gl.x", "user": "work", "config_dir": "/tmp/g"}]}`), "c.json"); err != nil {
+		t.Errorf("second account with its own glab dir: %v", err)
+	}
+}
+
+func TestWriteRawConflict(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	v1, err := WriteRaw(path, []byte(`{"concurrency":1}`), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Modify(path, func(c *Config) error { c.ScanDirs = []string{"~/x"}; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteRaw(path, []byte(`{"concurrency":2}`), v1); err != ErrChanged {
+		t.Errorf("stale save: %v, want ErrChanged", err)
+	}
+}

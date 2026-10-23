@@ -54,7 +54,11 @@ func runInput(ctx context.Context, env []string, body []byte, name string, args 
 // Publish posts the summary (if not empty) and the inline comments.
 // It acts as the account that found the PR/MR.
 func Publish(ctx context.Context, it Item, summary string, comments []PostComment) (PostResult, []PostResult) {
-	env, err := ItemAccount(it).Env(ctx)
+	acc, err := PublishAccount(it)
+	var env []string
+	if err == nil {
+		env, err = acc.Env(ctx)
+	}
 	if err != nil {
 		sum := PostResult{ID: "summary", Err: err}
 		res := make([]PostResult, len(comments))

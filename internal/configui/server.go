@@ -509,6 +509,7 @@ type configResp struct {
 	Effective map[string]any  `json:"effective"`
 	Clones    []cloneInfo     `json:"clones"`
 	Exists    bool            `json:"exists"`
+	Version   string          `json:"version"` // of the file on disk; sent back on save
 }
 
 type cloneInfo struct {
@@ -528,6 +529,9 @@ func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) (any, error) 
 		return nil, err
 	}
 	resp := configResp{Path: s.Path, Raw: b, Builtin: json.RawMessage(config.BuiltinSettings()), Exists: exists}
+	if exists {
+		resp.Version = config.Version(b)
+	}
 	if cfg, err := config.Parse(b, s.Path); err == nil {
 		resp.Effective = effective(cfg)
 		resp.Clones = clones(r.Context(), cfg)
@@ -665,10 +669,14 @@ func (s *Server) scan(w http.ResponseWriter, r *http.Request) (any, error) {
 // save validates, keeps a .bak of the previous file and writes the JSON
 // as submitted (key order preserved), re-indented.
 func (s *Server) save(w http.ResponseWriter, r *http.Request) (any, error) {
-	raw, err := readRaw(r)
-	if err != nil {
+	var req struct {
+		Raw  json.RawMessage `json:"raw"`
+		Base string          `json:"base"` // version the page loaded
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
 		return nil, err
 	}
+	raw := []byte(req.Raw)
 	if _, err := config.Parse(raw, s.Path); err != nil {
 		return nil, cleanErr(err, s.Path)
 	}
@@ -677,23 +685,17 @@ func (s *Server) save(w http.ResponseWriter, r *http.Request) (any, error) {
 		return nil, err
 	}
 	buf.WriteByte('\n')
-	if old, err := os.ReadFile(s.Path); err == nil {
-		_ = os.WriteFile(s.Path+".bak", old, 0o600)
+	version, err := config.WriteRaw(s.Path, buf.Bytes(), req.Base)
+	if errors.Is(err, config.ErrChanged) {
+		return nil, errors.New("conflict: Juhas (or another Settings tab) changed the config since this page loaded — e.g. it auto-mapped a clone. Reload to see it, then make your change again")
 	}
-	if err := os.MkdirAll(filepath.Dir(s.Path), 0o755); err != nil {
-		return nil, err
-	}
-	tmp := s.Path + ".tmp"
-	if err := os.WriteFile(tmp, buf.Bytes(), 0o600); err != nil {
-		return nil, err
-	}
-	if err := os.Rename(tmp, s.Path); err != nil {
+	if err != nil {
 		return nil, err
 	}
 	if s.OnSave != nil {
 		go s.OnSave()
 	}
-	return map[string]any{"ok": true, "saved": time.Now().Format("15:04:05")}, nil
+	return map[string]any{"ok": true, "saved": time.Now().Format("15:04:05"), "version": version}, nil
 }
 
 func cleanErr(err error, path string) error {

@@ -189,16 +189,23 @@ func (a *App) autoMapLoop() {
 }
 
 func (a *App) autoMap() {
-	cfg, err := config.Load(a.cfgPath) // fresh from disk: never save a stale copy
-	if err != nil || !cfg.AutoMapOn() {
+	var changes []scan.Change
+	errNothing := errors.New("nothing to map")
+	err := config.Modify(a.cfgPath, func(cfg *config.Config) error { // fresh from disk, under the write lock
+		if !cfg.AutoMapOn() {
+			return errNothing
+		}
+		var err error
+		if changes, err = scan.AutoMap(context.Background(), cfg); err == nil && len(changes) == 0 {
+			err = errNothing
+		}
+		return err
+	})
+	if errors.Is(err, errNothing) {
 		return
 	}
-	changes, err := scan.AutoMap(context.Background(), cfg)
-	if err != nil || len(changes) == 0 {
-		return
-	}
-	if err := cfg.Save(a.cfgPath); err != nil {
-		a.logger.Printf("auto_map: saving config: %v", err)
+	if err != nil {
+		a.logger.Printf("auto_map: %v", err)
 		return
 	}
 	var added []string
@@ -903,11 +910,7 @@ func (a *App) openLog(logPath string) {
 
 // setScreenEffect flips screen_effect in the config file.
 func (a *App) setScreenEffect(on bool) {
-	cfg, err := config.Load(a.cfgPath)
-	if err == nil {
-		cfg.ScreenEffect = &on
-		err = cfg.Save(a.cfgPath)
-	}
+	err := config.Modify(a.cfgPath, func(cfg *config.Config) error { cfg.ScreenEffect = &on; return nil })
 	if err != nil {
 		platform.Notify(platform.Notification{Title: "Juhas", Message: "Setting not saved: " + err.Error()})
 		return
@@ -920,13 +923,7 @@ func (a *App) setScreenEffect(on bool) {
 }
 
 func (a *App) saveMapping(key, dir string) {
-	cfg, err := config.Load(a.cfgPath)
-	if err == nil {
-		err = cfg.SetRepoPath(key, dir)
-	}
-	if err == nil {
-		err = cfg.Save(a.cfgPath)
-	}
+	err := config.Modify(a.cfgPath, func(cfg *config.Config) error { return cfg.SetRepoPath(key, dir) })
 	if err != nil {
 		platform.Notify(platform.Notification{Title: "Juhas", Message: "Mapping not saved: " + err.Error()})
 		return
