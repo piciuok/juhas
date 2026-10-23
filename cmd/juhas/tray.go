@@ -39,6 +39,7 @@ func init() {
 }
 
 func cmdTray(args []string) error {
+	platform.UseLoginShellPath() // the same CLIs as in the terminal
 	return tray.Run(tray.Options{DoctorOptions: doctorOptions(false), Version: version})
 }
 

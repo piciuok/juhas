@@ -298,6 +298,7 @@ func codex(ctx context.Context, r *Report, cfg *config.Config, opt Options) {
 	v := version(ctx, p)
 	lvl, note, hint := checkVersion("codex", v)
 	r.add(lvl, "Codex", fmt.Sprintf("%s: %s (%s)%s", bin, v, p, note), hint)
+	shadowed(ctx, r, "Codex", bin, p, v)
 	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(cctx, bin, "login", "status").CombinedOutput()
@@ -425,4 +426,28 @@ func anyReviewer(items []forge.RawMR) bool {
 func isDir(p string) bool {
 	st, err := os.Stat(p)
 	return err == nil && st.IsDir()
+}
+
+// shadowed warns when another copy of bin later in PATH has a different
+// version: the tray and the terminal may then run different ones.
+func shadowed(ctx context.Context, r *Report, section, bin, first, v string) {
+	if strings.ContainsRune(bin, os.PathSeparator) {
+		return
+	}
+	seen := map[string]bool{first: true}
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		p := filepath.Join(dir, bin)
+		if real, err := filepath.EvalSymlinks(p); err == nil && !seen[p] && !seen[real] {
+			if st, err := os.Stat(real); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+				seen[p], seen[real] = true, true
+				if real == first {
+					continue
+				}
+				if ov := version(ctx, p); ov != v {
+					r.add(Warn, section, fmt.Sprintf("%s: %s (%s) is used; another copy %s (%s) comes later in PATH", bin, v, first, ov, p),
+						"remove the one you do not use, or set "+strings.ToLower(section)+".bin to the full path in Settings")
+				}
+			}
+		}
+	}
 }

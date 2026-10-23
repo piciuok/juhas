@@ -200,6 +200,11 @@ func runCodex(ctx context.Context, cfg *config.Config, s config.Settings, it for
 	}
 	switch {
 	case sr.Failed != "":
+		if strings.Contains(sr.Failed, "requires a newer version of Codex") {
+			// e.g. an old Homebrew codex earlier in PATH than the one the terminal uses
+			bin, _ := exec.LookPath(a.Bin)
+			return "", fmt.Errorf("codex at %s is too old for the model set in ~/.codex/config.toml — update it, or set codex.bin to a newer codex in Settings (log: %s)", bin, logPath)
+		}
 		return "", fmt.Errorf("codex: %s (log: %s)", sr.Failed, logPath)
 	case err != nil && text == "":
 		return "", fmt.Errorf("codex exited with an error: %v (log: %s)", err, logPath)
