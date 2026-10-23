@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Juhas — Panel</title>
+<link rel="icon" id="favicon">
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #fff; --text: #1d2125; --muted: #626f7a; --line: #dfe3e8;
+  --accent: #2f81f7; --accent-weak: #e7f0fe; --ok: #1f883d; --warn: #b7791f; --err: #cf222e; --volt: #f5b800; --chip: #eef1f4;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111418; --panel: #191d22; --text: #e6e9ec; --muted: #9aa4ae; --line: #2c333a;
+    --accent: #58a6ff; --accent-weak: #16263d; --ok: #3fb950; --warn: #d29922; --err: #f85149; --volt: #ffd400; --chip: #232a31; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, Cantarell, sans-serif; }
+header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 20px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+header h1 { margin: 0; font-size: 16px; display: flex; gap: 8px; align-items: center; }
+.stats { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 12px; background: var(--chip); font-size: 12.5px; white-space: nowrap; }
+.pill.urgent { background: color-mix(in srgb, var(--volt) 25%, transparent); color: var(--text); font-weight: 600; }
+.pill.live { color: var(--accent); }
+.spacer { flex: 1; }
+button, .btn { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; text-decoration: none; white-space: nowrap; }
+button:hover, .btn:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.volt { background: var(--volt); border-color: var(--volt); color: #2b1d00; font-weight: 600; }
+button:disabled { opacity: .5; cursor: default; }
+label.toggle { display: inline-flex; gap: 5px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+main { padding: 16px 20px 60px; max-width: 1180px; margin: 0 auto; }
+#notice { display: none; margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--err); color: var(--err); }
+.errors { margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--warn); color: var(--warn); font-size: 13px; }
+section.repo { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+.repo-head { display: flex; gap: 10px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.repo-head a { color: var(--text); font-weight: 600; text-decoration: none; }
+.repo-head a:hover { color: var(--accent); }
+.repo-head .muted { font-size: 12.5px; }
+.muted { color: var(--muted); }
+.row { display: grid; grid-template-columns: 110px 1fr auto; gap: 4px 14px; padding: 9px 14px; border-top: 1px solid var(--line); align-items: center; }
+.repo-head + .row { border-top: none; }
+.row.urgent { box-shadow: inset 3px 0 0 var(--volt); }
+.row.skipped { opacity: .55; }
+.st { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); text-align: center; white-space: nowrap; }
+.st.running { color: var(--accent); border-color: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+.st.queued { color: var(--muted); border-style: dashed; }
+.st.done { color: var(--ok); border-color: var(--ok); }
+.st.failed { color: var(--err); border-color: var(--err); }
+@keyframes pulse { 50% { opacity: .45; } }
+.title { min-width: 0; }
+.title a { color: var(--text); text-decoration: none; font-weight: 500; }
+.title a:hover { color: var(--accent); }
+.title .ref { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: var(--muted); margin-right: 6px; }
+.meta { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; gap: 10px; flex-wrap: wrap; }
+.files { font-family: ui-monospace, Menlo, monospace; }
+.files .a { color: var(--ok); } .files .m { color: var(--warn); } .files .d { color: var(--err); }
+.why { color: var(--warn); }
+.err { color: var(--err); }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.empty { padding: 40px; text-align: center; color: var(--muted); }
+#histToggle { display: block; width: 100%; margin: 26px 0 10px; padding: 10px; border-style: dashed; color: var(--muted); background: transparent; }
+#histToggle:hover { color: var(--text); }
+section.history { border: 1px dashed var(--line); border-radius: 10px; background: color-mix(in srgb, var(--panel) 55%, transparent); }
+section.history h2 { margin: 0; padding: 10px 14px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-bottom: 1px dashed var(--line); }
+.hrow { display: grid; grid-template-columns: 130px 1fr auto; gap: 4px 14px; padding: 8px 14px; border-top: 1px dashed var(--line); align-items: center; }
+section.history h2 + .hrow { border-top: none; }
+.hrow .when { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hrow .title a { color: var(--muted); }
+.hrow .title a:hover { color: var(--accent); }
+.closed { font-size: 11.5px; padding: 1px 7px; border-radius: 9px; background: var(--chip); color: var(--muted); }
+@media (max-width: 760px) { .hrow { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .row { grid-template-columns: 1fr; }
+  .actions { justify-content: flex-start; }
+  header { padding: 10px 16px; } main { padding: 12px 16px 40px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1><span id="logo"></span>Juhas</h1>
+  <div class="stats" id="stats"></div>
+  <span class="spacer"></span>
+  <label class="toggle" title="New urgent PR/MR: lightning on screen and a loud notification"><input type="checkbox" id="tgZap"> ⚡ kick</label>
+  <button id="btnZap" title="Show the effect">test</button>
+  <label class="toggle"><input type="checkbox" id="tgAuto"> start at login</label>
+  <button id="btnPoll" title="Manual check: also asks about PR/MRs you skipped (same head)">Check now</button>
+  <button id="btnBriefs">Briefs</button>
+  <button id="btnSettings">Settings</button>
+  <button id="btnDoctor" title="CLI (gh, glab, claude, codex), login, repos">🩺 Diagnostics</button>
+</header>
+<main>
+  <div id="notice"></div>
+  <div id="errors"></div>
+  <div id="repos"></div>
+  <div id="history"></div>
+</main>
+<script>
+"use strict";
+const T = new URLSearchParams(location.search).get("t");
+const $ = (s) => document.querySelector(s);
+const h = (tag, attrs = {}, ...kids) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (v === true) el.setAttribute(k, "");
+    else if (v !== false && v != null) el.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : String(kid));
+  return el;
+};
+
+// favicons: magnifier normally, lightning bolt while something urgent waits
+const ICON_LENS = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='13' cy='13' r='8' fill='none' stroke='%232f81f7' stroke-width='3.5'/><path d='M19 19l8 8' stroke='%232f81f7' stroke-width='4.5' stroke-linecap='round'/></svg>`;
+const ICON_BOLT = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M19 1L6 18h8l-3 13 14-18h-8l4-12z' fill='%23ffd400' stroke='%232b1d00' stroke-width='1.5' stroke-linejoin='round'/></svg>`;
+const setIcon = (svg) => { $("#favicon").href = "data:image/svg+xml," + svg; };
+$("#logo").innerHTML = decodeURIComponent(ICON_LENS.replace("viewBox", "width='20' height='20' viewBox"));
+
+async function api(path, body) {
+  const r = await fetch(path, { method: body ? "POST" : "GET", headers: { "X-Token": T, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({ error: "HTTP " + r.status }));
+  if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+  return j;
+}
+function notice(msg) {
+  const n = $("#notice"); n.textContent = msg || ""; n.style.display = msg ? "block" : "none";
+  if (msg) setTimeout(() => notice(""), 6000);
+}
+async function act(action, extra = {}) {
+  try { await api("/api/panel/do", { action, ...extra }); refresh(true); }
+  catch (e) { notice(e.message); }
+}
+
+const STATUS = { pending: "waiting", queued: "⏳ queued", running: "● reviewing", done: "📝 done", failed: "✗ failed", skipped: "skipped", noclone: "no clone" };
+
+function files(f) {
+  if (!f) return null;
+  return h("span", { class: "files", title: "files: +added ~changed −deleted" },
+    ...f.split(" ").map((p) => h("span", { class: p[0] === "+" ? "a" : p[0] === "~" ? "m" : p[0] === "−" ? "d" : "" }, p + " ")));
+}
+
+function entryRow(e) {
+  const logURL = e.log_id ? `/log?t=${T}&job=${e.log_id}` : null;
+  const actions = [];
+  if (e.busy) {
+    actions.push(h("a", { class: "btn", href: logURL, target: "_blank" }, "👁 Live view"));
+    actions.push(h("button", { onclick: () => act("cancel", { url: e.url }) }, "Cancel"));
+  } else {
+    e.agents.forEach((a, i) => {
+      const again = e.status === "done" || e.status === "failed";
+      actions.push(h("button", { class: i === 0 ? "primary" : "", title: a.method,
+        onclick: (ev) => { ev.target.disabled = true; act("analyze", { url: e.url, agent: a.name }); } },
+        (i === 0 ? (again ? "▶ Review again" : "▶ Review") : "with") + " " + a.label));
+    });
+    if (logURL) actions.push(h("a", { class: "btn", href: logURL, target: "_blank" }, "Run log"));
+  }
+  if (e.proposal && e.log_id) {
+    const p = e.proposal;
+    const label = p.pending ? `📝 Proposal (${p.pending} awaiting decision)` : p.posted ? `📝 Published ${p.posted}/${p.total}` : `📝 Proposal (${p.accepted} ✓)`;
+    actions.push(h("a", { class: "btn" + (p.pending ? " primary" : ""), href: `/review?t=${T}&job=${e.log_id}`, target: "_blank", style: p.pending ? "color:#fff" : null }, label));
+  }
+  if (e.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: e.url }) }, e.stale ? "Brief ⟳" : "Brief"));
+  if (e.guess) actions.push(h("button", { title: e.guess, onclick: () => act("map", { url: e.url }) }, "Map clone"));
+  if (e.urgent && !e.acked) actions.push(h("button", { class: "volt", onclick: () => act("ack", { url: e.url }) }, "🔕 OK"));
+  if (!e.busy) actions.push(e.status === "skipped"
+    ? h("button", { onclick: () => act("unskip", { url: e.url }) }, "Restore")
+    : h("button", { title: "Don't ask again until there are new commits", onclick: () => act("skip", { url: e.url }) }, "Skip"));
+
+  const who = [e.requested && "reviewer", e.assigned && "assignee"].filter(Boolean).join(", ");
+  return h("div", { class: "row" + (e.urgent ? " urgent" : "") + (e.status === "skipped" ? " skipped" : "") },
+    h("span", { class: "st " + (e.busy && e.status !== "queued" ? "running" : e.status) },
+      e.status === "done" && e.proposal && (e.proposal.pending || e.proposal.accepted) ? "📝 awaiting decision" : (STATUS[e.status] || e.status)),
+    h("div", { class: "title" },
+      h("div", {}, h("span", { class: "ref" }, e.ref), h("a", { href: e.url, target: "_blank", rel: "noopener" }, e.title)),
+      h("div", { class: "meta" },
+        h("span", {}, e.author), who ? h("span", {}, who) : null, files(e.files),
+        e.urgent ? h("span", { class: "why" }, "⚡ " + e.urgent_why + (e.acked ? " (acknowledged)" : "")) : null,
+        e.stale ? h("span", {}, "new commits since the brief") : null,
+        e.method ? h("span", {}, e.method) : null,
+        e.status === "failed" && e.error ? h("span", { class: "err", title: e.error }, e.error.slice(0, 120)) : null,
+        e.status === "noclone" ? h("span", { class: "err" }, "no local clone — add one in Settings") : null)),
+    h("div", { class: "actions" }, actions));
+}
+
+let lastJSON = "";
+async function refresh(force) {
+  let m;
+  try { m = await api("/api/panel"); }
+  catch (e) { notice("Can't reach Juhas: " + e.message); schedule(5000); return; }
+  const json = JSON.stringify(m);
+  if (force || json !== lastJSON) render(m);
+  lastJSON = json;
+  schedule(m.running || m.waiting || m.polling ? 1000 : 2500);
+}
+let timer = null;
+function schedule(ms) { clearTimeout(timer); timer = setTimeout(refresh, ms); }
+
+function render(m) {
+  const urgentLive = m.unacked > 0;
+  setIcon(urgentLive ? ICON_BOLT : ICON_LENS);
+  document.title = (urgentLive ? `⚡${m.unacked} · ` : "") + `(${m.total}) Juhas — Panel`;
+  const stats = $("#stats"); stats.replaceChildren(...[
+    h("span", { class: "pill" }, `${m.total} to review`),
+    m.urgent ? h("span", { class: "pill urgent" }, `⚡ ${m.urgent} urgent`) : null,
+    m.running ? h("span", { class: "pill live" }, `● ${m.running} running`) : null,
+    m.waiting ? h("span", { class: "pill" }, `⏳ ${m.waiting} queued (parallel: ${m.concurrency})`) : null,
+    h("span", { class: "pill" }, m.polling ? "checking…" : (m.polled_at ? "checked " + m.polled_at : "—")),
+    m.doctor ? h("span", { class: "pill", title: "Diagnostics" }, "⚠ " + m.doctor) : null,
+    m.update && m.update.installing ? h("span", { class: "pill live" }, `⬆ installing ${m.update.latest}…`) : null,
+    m.update && m.update.latest && !m.update.installing ? h("button", { class: "primary", title: `You have ${m.update.current}`, onclick: () => act("update") }, `⬆ Update to ${m.update.latest}`) : null,
+    m.update && m.update.latest && !m.update.installing ? h("a", { class: "btn", href: m.update.url, target: "_blank", rel: "noopener" }, "What's new") : null,
+    m.unacked ? h("button", { class: "volt", onclick: () => act("ack") }, `🔕 Acknowledge urgent (${m.unacked})`) : null].filter(Boolean));
+  $("#tgZap").checked = m.screen_effect;
+  $("#tgAuto").checked = m.autostart;
+  $("#errors").replaceChildren(...(m.errors.length ? [h("div", { class: "errors" }, "⚠ Fetch errors: ", m.errors.join(" · "))] : []));
+  const repos = $("#repos"); repos.replaceChildren();
+  renderHistory(m);
+  if (!m.repos || !m.repos.length) {
+    repos.append(h("div", { class: "empty" }, m.polled_at ? "✓ Nothing is waiting for your review" : "First check in progress…"));
+    return;
+  }
+  for (const r of m.repos) {
+    if (!r.entries || !r.entries.length) continue;
+    repos.append(h("section", { class: "repo" },
+      h("div", { class: "repo-head" },
+        h("a", { href: r.list_url, target: "_blank", rel: "noopener" }, r.short),
+        h("span", { class: "muted" }, [r.open >= 0 ? `${r.open} open` : null, `${r.queued} for me`, r.mode].filter(Boolean).join(" · ")),
+        r.urgent ? h("span", { class: "pill urgent" }, `⚡ ${r.urgent}`) : null),
+      r.entries.map(entryRow)));
+  }
+}
+
+let showHistory = location.hash === "#history";
+try { if (!showHistory) showHistory = localStorage.getItem("juhas.history") === "1"; } catch (_) {}
+
+function renderHistory(m) {
+  const box = $("#history"); box.replaceChildren();
+  const hist = m.history || [];
+  if (!hist.length) return;
+  box.append(h("button", { id: "histToggle", onclick: () => {
+    showHistory = !showHistory;
+    try { localStorage.setItem("juhas.history", showHistory ? "1" : "0"); } catch (_) {}
+    renderHistory(m);
+  } }, showHistory ? `▾ Hide history (${hist.length})` : `📚 Show history (${hist.length})`));
+  if (!showHistory) return;
+  box.append(h("section", { class: "history", id: "history" },
+    h("h2", {}, "Reviewed history — PR/MRs not waiting for you"),
+    hist.map((x) => {
+      const actions = [];
+      if (x.proposal && x.log_id) actions.push(h("a", { class: "btn", href: `/review?t=${T}&job=${x.log_id}`, target: "_blank" },
+        x.proposal.posted ? `📝 published ${x.proposal.posted}/${x.proposal.total}` : `📝 proposal (${x.proposal.pending} awaiting decision)`));
+      if (x.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: x.url }) }, "Brief"));
+      if (x.log_id) actions.push(h("a", { class: "btn", href: `/log?t=${T}&job=${x.log_id}`, target: "_blank" }, "Run log"));
+      return h("div", { class: "hrow" },
+        h("span", { class: "when" }, x.when),
+        h("div", { class: "title" },
+          h("div", {}, h("span", { class: "ref" }, `${x.repo} ${x.ref}`), " ", h("a", { href: x.url, target: "_blank", rel: "noopener" }, x.title)),
+          h("div", { class: "meta" }, x.method ? h("span", {}, x.method) : null,
+            x.open ? h("span", {}, "open, unchanged since review") : h("span", { class: "closed" }, "out of the queue (merged / closed / not for me)"))),
+        h("div", { class: "actions" }, actions));
+    })));
+  if (location.hash === "#history") { document.getElementById("history").scrollIntoView(); history.replaceState(null, "", location.pathname + location.search); }
+}
+
+$("#tgZap").addEventListener("change", (e) => act("screen_effect", { on: e.target.checked }));
+$("#tgAuto").addEventListener("change", (e) => act("autostart", { on: e.target.checked }));
+$("#btnZap").addEventListener("click", () => act("zap"));
+$("#btnPoll").addEventListener("click", () => act("poll"));
+$("#btnBriefs").addEventListener("click", () => act("briefs"));
+$("#btnSettings").addEventListener("click", () => act("settings"));
+$("#btnDoctor").addEventListener("click", () => window.open("/doctor?t=" + encodeURIComponent(T), "juhas-doctor"));
+setIcon(ICON_LENS);
+refresh(true);
+</script>
+</body>
+</html>

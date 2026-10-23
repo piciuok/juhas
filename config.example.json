@@ -1,0 +1,42 @@
+{
+  "poll_interval": "3m",
+  "briefs_dir": "~/ReviewBriefs",
+  "scan_dirs": ["~/Projects"],
+  "auto_map": true,
+  "concurrency": 1,
+  "ask_style": "dialog",
+  "auto_max_per_poll": 2,
+  "flash_interval": "600ms",
+  "claude": { "bin": "claude", "model": "", "effort": "" },
+  "codex": { "bin": "codex", "model": "", "effort": "" },
+  "github": [{ "host": "github.com" }],
+  "gitlab": [{ "host": "gitlab.example.com" }],
+  "updates": { "check": true, "interval": "24h", "prerelease": false, "auto_install": false },
+  "defaults": {
+    "agent": "claude",
+    "mode": "requested",
+    "include_drafts": false,
+    "ignore_authors": ["re:^project_\\d+_bot"],
+    "count_open": true,
+    "on_new": "ask",
+    "flash": true,
+    "flash_decisions": true,
+    "language": { "brief": "en", "comments": "en" },
+    "review": {
+      "skill": "auto",
+      "skill_args": "",
+      "fallback": "builtin",
+      "max_turns": 60,
+      "timeout": "30m",
+      "model": "",
+      "effort": "",
+      "allowed_tools": [],
+      "disallowed_tools": []
+    },
+    "urgent": { "labels": ["urgent", "priority::high", "hotfix"], "older_than": "", "target_branches": [] }
+  },
+  "repos": {
+    "gitlab.example.com/team/app": { "path": "~/Projects/app", "mode": "open", "language": { "comments": "pl" } },
+    "github.com/acme/widgets": "~/Projects/widgets"
+  }
+}

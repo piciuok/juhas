@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Juhas — Run log</title>
+<link rel="icon" id="favicon">
+<style>
+:root { --bg: #f6f7f9; --panel: #fff; --text: #1d2125; --muted: #626f7a; --line: #dfe3e8; --accent: #2f81f7; --ok: #1f883d; --err: #cf222e; --warn: #b7791f; color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111418; --panel: #191d22; --text: #e6e9ec; --muted: #9aa4ae; --line: #2c333a; --accent: #58a6ff; --ok: #3fb950; --err: #f85149; --warn: #d29922; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, sans-serif; }
+header { position: sticky; top: 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 15px; margin: 0; flex: 1; min-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); white-space: nowrap; }
+.st.running, .st.queued { color: var(--accent); border-color: var(--accent); }
+.st.done { color: var(--ok); border-color: var(--ok); }
+.st.failed { color: var(--err); border-color: var(--err); }
+a { color: var(--accent); }
+label { font-size: 12px; color: var(--muted); display: flex; gap: 4px; align-items: center; }
+#err { display: none; margin: 12px 16px 0; color: var(--err); }
+pre { margin: 0; padding: 14px 16px 40px; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
+.blocked { color: var(--err); } .fail { color: var(--err); } .ok { color: var(--ok); } .tool { color: var(--accent); } .sub { color: var(--muted); } .say { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Run log</h1>
+  <span id="status" class="st">…</span>
+  <a id="pr" target="_blank" rel="noopener" style="display:none">PR/MR</a>
+  <label><input type="checkbox" id="follow" checked> follow output</label>
+</header>
+<div id="err"></div>
+<pre id="log"></pre>
+<script>
+"use strict";
+const q = new URLSearchParams(location.search);
+const T = q.get("t"), JOB = q.get("job");
+const log = document.getElementById("log");
+const statusEl = document.getElementById("status");
+let offset = 0, timer = null;
+// favicon: a bolt coloured by status, so tabs of several runs tell apart
+const COLORS = { running: "%232f81f7", queued: "%239aa0a6", done: "%231f883d", failed: "%23cf222e" };
+const MARK = { running: "●", queued: "⏳", done: "✓", failed: "✗" };
+function favicon(status) {
+  const c = COLORS[status] || "%239aa0a6";
+  document.getElementById("favicon").href = "data:image/svg+xml," +
+    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M19 1L6 18h8l-3 13 14-18h-8l4-12z' fill='${c}' stroke='%23000' stroke-opacity='.35' stroke-width='1.2' stroke-linejoin='round'/></svg>`;
+}
+favicon("queued");
+const labels = { running: "review running", queued: "queued", done: "done", failed: "failed", pending: "waiting", skipped: "skipped", asked: "asked" };
+
+function cls(line) {
+  if (line.includes("⛔")) return "blocked";
+  if (/ ✗ /.test(line)) return "fail";
+  if (/ ✓ /.test(line)) return "ok";
+  if (line.includes("│")) return "sub";
+  if (line.includes("▶")) return "tool";
+  if (line.includes("💬")) return "say";
+  return "";
+}
+function append(text) {
+  for (const line of text.split(/(?<=\n)/)) {
+    const span = document.createElement("span");
+    const c = cls(line); if (c) span.className = c;
+    span.textContent = line;
+    log.append(span);
+  }
+  if (document.getElementById("follow").checked) window.scrollTo(0, document.body.scrollHeight);
+}
+async function tick() {
+  try {
+    const r = await fetch(`/api/log?job=${JOB}&offset=${offset}`, { headers: { "X-Token": T } });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    if (j.reset) { log.replaceChildren(); }
+    if (j.text) append(j.text);
+    offset = j.offset;
+    if (j.title) {
+      document.getElementById("title").textContent = j.title;
+      const ref = (j.url.match(/merge_requests\/(\d+)/) || [])[1] ? "!" + j.url.match(/merge_requests\/(\d+)/)[1]
+        : (j.url.match(/pull\/(\d+)/) || [])[1] ? "#" + j.url.match(/pull\/(\d+)/)[1] : "";
+      document.title = `${MARK[j.status] || ""} ${ref} ${j.title.replace(/^\S+\s/, "")}`.trim();
+    }
+    favicon(j.status);
+    if (j.url) { const a = document.getElementById("pr"); a.href = j.url; a.style.display = ""; }
+    statusEl.textContent = labels[j.status] || j.status || "no data";
+    statusEl.className = "st " + (j.status || "");
+    if (j.status === "failed" && j.error) { const e = document.getElementById("err"); e.textContent = j.error; e.style.display = "block"; }
+    document.getElementById("err").style.display = j.status === "failed" && j.error ? "block" : "none";
+    const live = j.status === "running" || j.status === "queued";
+    timer = setTimeout(tick, live ? 1000 : 5000);
+  } catch (e) {
+    const el = document.getElementById("err"); el.textContent = "Can't reach the app: " + e.message; el.style.display = "block";
+    timer = setTimeout(tick, 5000);
+  }
+}
+tick();
+</script>
+</body>
+</html>

@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Juhas — Settings</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cg fill='%236e7781'%3E%3Ccircle cx='16' cy='16' r='9'/%3E%3Crect x='14' y='1' width='4' height='7' rx='1'/%3E%3Crect x='14' y='24' width='4' height='7' rx='1'/%3E%3Crect x='1' y='14' width='7' height='4' rx='1'/%3E%3Crect x='24' y='14' width='7' height='4' rx='1'/%3E%3Crect x='14' y='1' width='4' height='7' rx='1' transform='rotate(45 16 16)'/%3E%3Crect x='14' y='24' width='4' height='7' rx='1' transform='rotate(45 16 16)'/%3E%3Crect x='1' y='14' width='7' height='4' rx='1' transform='rotate(45 16 16)'/%3E%3Crect x='24' y='14' width='7' height='4' rx='1' transform='rotate(45 16 16)'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='4' fill='white'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1d2125; --muted: #626f7a; --line: #dfe3e8;
+  --accent: #2f81f7; --accent-weak: #e7f0fe; --ok: #1f883d; --warn: #b7791f; --err: #cf222e;
+  --input: #ffffff; --chip: #eef1f4; --inherit: #8a949e;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111418; --panel: #191d22; --text: #e6e9ec; --muted: #9aa4ae; --line: #2c333a;
+    --accent: #58a6ff; --accent-weak: #16263d; --ok: #3fb950; --warn: #d29922; --err: #f85149;
+    --input: #0f1216; --chip: #232a31; --inherit: #6e7781;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, Cantarell, sans-serif; background: var(--bg); color: var(--text); }
+header { position: sticky; top: 0; z-index: 5; display: flex; gap: 12px; align-items: center; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 15px; margin: 0; white-space: nowrap; }
+header .path { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+#status { font-size: 12px; white-space: nowrap; }
+#status.ok { color: var(--ok); } #status.err { color: var(--err); } #status.dirty { color: var(--warn); }
+button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:disabled { opacity: .5; cursor: default; }
+button.small { padding: 2px 8px; font-size: 12px; }
+button.danger { color: var(--err); }
+.layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 52px); }
+nav { border-right: 1px solid var(--line); padding: 12px 8px; background: var(--panel); }
+nav a { display: block; padding: 7px 10px; border-radius: 6px; color: var(--text); text-decoration: none; cursor: pointer; }
+nav a.active { background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+nav .count { float: right; color: var(--muted); font-size: 12px; }
+main { padding: 20px 28px 60px; max-width: 980px; }
+h2 { font-size: 18px; margin: 0 0 4px; }
+.lead { color: var(--muted); margin: 0 0 18px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 16px; margin-bottom: 16px; }
+.card h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 0 4px; }
+.row { display: grid; grid-template-columns: 210px 1fr; gap: 6px 16px; padding: 10px 0; border-top: 1px solid var(--line); align-items: start; }
+.card h3 + .row { border-top: none; }
+.row label.name { font-weight: 600; padding-top: 5px; }
+.row .help { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.row .from { color: var(--inherit); font-size: 12px; margin-top: 4px; }
+.ctl { display: flex; gap: 10px; align-items: flex-start; }
+.ctl .ov { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; padding-top: 6px; }
+.ctl .val { flex: 1; min-width: 0; }
+input[type=text], input[type=number], select, textarea { width: 100%; font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--input); color: var(--text); }
+textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+input:disabled, select:disabled, textarea:disabled { color: var(--inherit); background: transparent; border-style: dashed; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.overridden label.name::after { content: " •"; color: var(--accent); }
+#error { display: none; margin: 0 0 16px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--err); color: var(--err); background: color-mix(in srgb, var(--err) 8%, transparent); white-space: pre-wrap; }
+table { width: 100%; border-collapse: collapse; }
+td, th { text-align: left; padding: 8px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; border-top: none; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-weak); }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 10px; background: var(--chip); font-size: 12px; margin-right: 4px; white-space: nowrap; }
+.badge.accent { background: var(--accent-weak); color: var(--accent); }
+.badge.warn { color: var(--warn); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; word-break: break-all; }
+.muted { color: var(--muted); }
+.toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+.toolbar input[type=text] { max-width: 320px; }
+.eff { font-size: 12.5px; color: var(--muted); margin: -6px 0 14px; }
+.back { margin-bottom: 10px; }
+.picker-btn { margin-top: 6px; }
+#picker { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
+#picker .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; width: min(640px, 100%); max-height: 80vh; display: flex; flex-direction: column; }
+#picker .top { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#picker .crumbs { flex: 1; min-width: 0; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; word-break: break-all; }
+#picker .crumbs a { color: var(--accent); cursor: pointer; }
+#picker ul { list-style: none; margin: 0; padding: 4px 0; overflow: auto; flex: 1; }
+#picker li { padding: 6px 14px; cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
+#picker li:hover { background: var(--accent-weak); }
+#picker li .k { color: var(--muted); font-size: 12px; font-family: ui-monospace, Menlo, monospace; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+#picker .bottom { padding: 10px 14px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+#picker .bottom .hint { flex: 1; color: var(--muted); font-size: 12px; }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: 1fr; }
+  nav { border-right: none; border-bottom: 1px solid var(--line); display: flex; overflow-x: auto; }
+  nav a { white-space: nowrap; }
+  main { padding: 16px; }
+  .row { grid-template-columns: 1fr; }
+  header .path { display: none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Juhas · Settings</h1>
+  <div class="path" id="path"></div>
+  <span id="status"></span>
+  <button id="btnReload" title="Reload from disk">Reload</button>
+  <button id="btnSave" class="primary" disabled>Save</button>
+  <button id="btnDoctor" title="CLI (gh, glab, claude, codex), login, repos">🩺 Diagnostics</button>
+  <button id="btnClose" title="End the editing session">Close</button>
+</header>
+<div class="layout">
+  <nav id="nav"></nav>
+  <main>
+    <div id="error"></div>
+    <div id="view"></div>
+  </main>
+</div>
+<div id="picker"><div class="box">
+  <div class="top"><div class="crumbs" id="pkCrumbs"></div><label class="muted" style="font-size:12px"><input type="checkbox" id="pkHidden"> hidden</label></div>
+  <ul id="pkList"></ul>
+  <div class="bottom"><span class="hint" id="pkHint"></span><button id="pkCancel">Cancel</button><button class="primary" id="pkOk">Choose this folder</button></div>
+</div></div>
+<script>
+"use strict";
+const TOKEN = new URLSearchParams(location.search).get("t");
+const $ = (s, el = document) => el.querySelector(s);
+const h = (tag, attrs = {}, ...kids) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (v === true) el.setAttribute(k, "");
+    else if (v !== false && v != null) el.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null) el.append(kid.nodeType ? kid : String(kid));
+  return el;
+};
+
+async function api(path, body) {
+  const r = await fetch(path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { "X-Token": TOKEN, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => ({ error: "HTTP " + r.status }));
+  if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+  return j;
+}
+
+// ---- schema --------------------------------------------------------------
+
+const GLOBAL = [
+  { k: "poll_interval", t: "dur", l: "Check every", help: "e.g. 3m, 90s, 1h" },
+  { k: "briefs_dir", t: "text", l: "Briefs folder", pick: "set" },
+  { k: "scan_dirs", t: "list", pick: "append", l: "Project folders", help: "One per line, e.g. ~/Projects. Scanned (up to 3 levels deep); clones found there are linked to their GitHub/GitLab repos." },
+  { k: "auto_map", t: "bool", def: true, l: "Map automatically", help: "Yes: every 10 min new clones in the project folders are added to the repositories and moved ones are re-linked. No: only manually in “Add from scan”." },
+  { k: "github", t: "hosts", l: "GitHub hosts", help: "One per line, e.g. github.com or a GitHub Enterprise host. Auth comes from `gh auth login`." },
+  { k: "gitlab", t: "hosts", l: "GitLab hosts", help: "One per line. Auth comes from `glab auth login --hostname …`." },
+  { k: "concurrency", t: "num", l: "Parallel reviews", help: "How many reviews run at once." },
+  { k: "ask_style", t: "select", o: ["dialog", "notification"], l: "Prompt style", help: "dialog: a window with buttons; notification: a notification + choice in the menu." },
+  { k: "auto_max_per_poll", t: "num", l: "Auto limit per poll", help: "For on_new = auto: the most reviews a single poll starts." },
+  { k: "flash_interval", t: "dur", l: "Sparking speed", help: "Period of the lightning animation for urgent items, e.g. 600ms." },
+  { k: "screen_effect", t: "bool", def: true, l: "Screen kick", help: "New urgent PR/MR: lightning along the screen edges (macOS) and a loud notification. Once per urgent item." },
+  { g: "Claude", k: "claude.bin", t: "text", l: "Command" },
+  { g: "Claude", k: "claude.model", t: "text", l: "Model", list: ["opus", "sonnet", "haiku", "claude-opus-5-5", "claude-sonnet-5-5"], help: "Empty = Claude Code's default model. An alias (opus, sonnet) or a full ID." },
+  { g: "Claude", k: "claude.effort", t: "select", o: ["", "low", "medium", "high", "xhigh", "max"], l: "Effort", help: "Empty = default." },
+  { g: "Claude", k: "claude.extra_args", t: "list", l: "Extra arguments", help: "One argument per line." },
+  { g: "Codex", k: "codex.bin", t: "text", l: "Command" },
+  { g: "Codex", k: "codex.model", t: "text", l: "Model", help: "Empty = model from ~/.codex/config.toml." },
+  { g: "Codex", k: "codex.effort", t: "select", o: ["", "minimal", "low", "medium", "high", "xhigh"], l: "Effort (reasoning)", help: "model_reasoning_effort; empty = from ~/.codex/config.toml." },
+  { g: "Codex", k: "codex.extra_args", t: "list", l: "Extra arguments", help: "One argument per line, for codex exec." },
+  { g: "Updates", k: "updates.check", t: "bool", def: true, l: "Check for updates", help: "Looks for new Juhas releases on GitHub and notifies you once per version." },
+  { g: "Updates", k: "updates.interval", t: "dur", l: "Check every", help: "e.g. 24h, 12h" },
+  { g: "Updates", k: "updates.prerelease", t: "bool", l: "Include pre-releases", help: "Also offer -rc / -beta versions." },
+  { g: "Updates", k: "updates.auto_install", t: "bool", l: "Install automatically", help: "Install a new version on its own when no review is running, then restart. Off: you get a notification and an “Update” item in the menu." },
+];
+
+const SETTINGS = [
+  { g: "Repository", k: "path", t: "text", l: "Clone directory", repoOnly: true, pick: "set", help: "Empty = auto-mapped from the scanned folders." },
+  { g: "What to queue", k: "mode", t: "select", o: ["requested", "open"], l: "Mode",
+    help: "requested: when my review is requested or I'm assigned; open: all open PR/MRs of the repo (except mine, ignored authors' and ones I already approved)." },
+  { g: "What to queue", k: "include_drafts", t: "bool", l: "Include drafts" },
+  { g: "What to queue", k: "ignore_authors", t: "list", l: "Ignore authors", help: "One per line: a login or re:<regex>, e.g. re:^project_\\d+_bot" },
+  { g: "What to queue", k: "count_open", t: "bool", l: "Count all open", help: "The “N open” counter next to the repo in the menu." },
+  { g: "When a new one appears", k: "on_new", t: "select", o: ["ask", "auto", "silent", "off"], l: "Action",
+    help: "ask: ask “Run AI Review?”; auto: run right away; silent: only show in the menu; off: ignore the repo." },
+  { g: "AI Review", k: "agent", t: "select", o: ["claude", "codex"], l: "Default AI", help: "Who does the review. The other one can be picked in the new-PR/MR prompt and in the menu." },
+  { g: "AI Review", k: "review.skill", t: "text", l: "Skill", list: ["auto", "none", "review", "code-review"], help: "auto: the repo's review skill (.claude/skills/review…), none: go straight to the fallback, or a skill name." },
+  { g: "AI Review", k: "review.skill_args", t: "text", l: "Skill arguments", help: "Appended after the PR/MR number, e.g. --agents 2" },
+  { g: "AI Review", k: "review.fallback", t: "select", o: ["builtin", "claude-code-review", "none"], l: "Fallback", help: "When the repo has no skill: builtin (built-in prompt), claude-code-review (/code-review), none." },
+  { g: "AI Review", k: "review.max_turns", t: "num", l: "Max turns" },
+  { g: "AI Review", k: "review.timeout", t: "dur", l: "Timeout", help: "e.g. 30m" },
+  { g: "AI Review", k: "review.model", t: "text", l: "Model (override)", help: "Empty = the default AI's model from General. Applies only to this repo's default AI." },
+  { g: "AI Review", k: "review.effort", t: "text", l: "Effort (override)", help: "Empty = the default AI's effort from General." },
+  { g: "AI Review", k: "review.allowed_tools", t: "list", l: "Extra allowed tools", help: "E.g. mcp__atlassian__getJiraIssue so the review can read the ticket. Writes are blocked by a hook regardless of this list." },
+  { g: "AI Review", k: "review.disallowed_tools", t: "list", l: "Extra disallowed tools" },
+  { g: "Language", k: "language.brief", t: "text", l: "Brief language", list: ["pl", "en", "de", "uk"], help: "The language of the report written for you (code: pl, en… or a language name)." },
+  { g: "Language", k: "language.comments", t: "text", l: "PR/MR comment language", list: ["pl", "en", "de", "uk"], help: "The language of the proposed comments, ready to paste into the PR/MR (the agent does not post them)." },
+  { g: "Urgent (flashing)", k: "flash", t: "bool", l: "Icon sparking for urgent items" },
+  { g: "Urgent (flashing)", k: "flash_decisions", t: "bool", l: "Blinking ? for proposals awaiting decision", help: "A sparking ❓ with the number of proposals blinks next to the magnifier until you accept/reject and publish the comments (on Linux: a purple ? badge on the icon)." },
+  { g: "Urgent (flashing)", k: "urgent.labels", t: "list", l: "Labels", help: "A PR/MR assigned to me or requesting my review with one of these labels is urgent." },
+  { g: "Urgent (flashing)", k: "urgent.older_than", t: "dur", l: "Older than", help: "e.g. 24h, 2d; empty = off" },
+  { g: "Urgent (flashing)", k: "urgent.target_branches", t: "list", l: "Target branches", help: "Patterns, e.g. main, release/*" },
+];
+
+// ---- model ---------------------------------------------------------------
+
+let model = null;      // the whole config object (edited in place)
+let builtin = null;
+let serverEff = {};    // effective settings from the last validation
+let clones = [];
+let dirty = false;
+let route = { tab: "global" };
+
+const getPath = (obj, path) => path.split(".").reduce((o, k) => (o && typeof o === "object" ? o[k] : undefined), obj);
+const hasPath = (obj, path) => {
+  const parts = path.split("."); let o = obj;
+  for (const p of parts) { if (!o || typeof o !== "object" || !(p in o)) return false; o = o[p]; }
+  return true;
+};
+function setPath(obj, path, val) {
+  const parts = path.split("."); let o = obj;
+  for (const p of parts.slice(0, -1)) { if (!o[p] || typeof o[p] !== "object") o[p] = {}; o = o[p]; }
+  o[parts.at(-1)] = val;
+}
+function delPath(obj, path) {
+  const parts = path.split(".");
+  const stack = [obj]; let o = obj;
+  for (const p of parts.slice(0, -1)) { o = o?.[p]; if (!o) return; stack.push(o); }
+  delete o[parts.at(-1)];
+  for (let i = parts.length - 2; i >= 0; i--) {            // drop emptied objects
+    if (Object.keys(stack[i + 1]).length === 0) delete stack[i][parts[i]]; else break;
+  }
+}
+const clone = (v) => JSON.parse(JSON.stringify(v));
+function merge(dst, src) {
+  for (const [k, v] of Object.entries(src || {})) {
+    if (v && typeof v === "object" && !Array.isArray(v) && dst[k] && typeof dst[k] === "object" && !Array.isArray(dst[k])) merge(dst[k], v);
+    else dst[k] = clone(v);
+  }
+  return dst;
+}
+// A repo may be written as a plain path string; make it an object to edit.
+function repoObj(key) {
+  let v = model.repos[key];
+  if (typeof v === "string") { v = { path: v }; model.repos[key] = v; }
+  if (!v || typeof v !== "object") { v = {}; model.repos[key] = v; }
+  return v;
+}
+const defaultsLayer = () => (model.defaults ||= {});
+const parentOf = (layer) => layer === "defaults" ? clone(builtin) : merge(clone(builtin), model.defaults || {});
+
+function changed() {
+  dirty = true;
+  setStatus("unsaved changes", "dirty");
+  $("#btnSave").disabled = false;
+  scheduleValidate();
+}
+
+let vTimer = null;
+function scheduleValidate() {
+  clearTimeout(vTimer);
+  vTimer = setTimeout(validate, 350);
+}
+async function validate() {
+  try {
+    const r = await api("/api/validate", { raw: model });
+    serverEff = r.effective || {};
+    showError("");
+    $("#btnSave").disabled = !dirty;
+    updateEff();
+    return true;
+  } catch (e) {
+    showError(e.message);
+    $("#btnSave").disabled = true;
+    return false;
+  }
+}
+
+function setStatus(msg, cls) { const s = $("#status"); s.textContent = msg; s.className = cls || ""; }
+function showError(msg) { const e = $("#error"); e.textContent = msg ? "Config error: " + msg : ""; e.style.display = msg ? "block" : "none"; }
+
+// ---- controls --------------------------------------------------------------
+
+function toText(f, v) {
+  if (v == null) return "";
+  if (f.t === "list") return (v || []).join("\n");
+  if (f.t === "select" && v === "") return "";
+  if (f.t === "hosts") return (v || []).map((x) => x.host).join("\n");
+  return String(v);
+}
+function fromText(f, s) {
+  if (f.t === "list") return s.split("\n").map((x) => x.trim()).filter(Boolean);
+  if (f.t === "hosts") return s.split("\n").map((x) => x.trim()).filter(Boolean).map((host) => ({ host }));
+  if (f.t === "num") return s === "" ? 0 : Number(s);
+  return s;
+}
+
+function control(f, value, disabled, onInput) {
+  let el;
+  if (f.t === "bool") {
+    el = h("select", { disabled }, h("option", { value: "true" }, "yes"), h("option", { value: "false" }, "no"));
+    el.value = value ? "true" : "false";
+    el.addEventListener("change", () => onInput(el.value === "true"));
+  } else if (f.t === "select") {
+    el = h("select", { disabled }, f.o.map((o) => h("option", { value: o }, o || "(default)")));
+    el.value = value ?? f.o[0];
+    el.addEventListener("change", () => onInput(el.value));
+  } else if (f.t === "list" || f.t === "hosts") {
+    el = h("textarea", { rows: Math.max(2, Math.min(6, (value || []).length + 1)), disabled, spellcheck: "false" });
+    el.value = toText(f, value);
+    el.addEventListener("input", () => onInput(fromText(f, el.value)));
+  } else {
+    el = h("input", { type: f.t === "num" ? "number" : "text", disabled, spellcheck: "false",
+      placeholder: f.t === "dur" ? "e.g. 3m, 48h, 2d" : "", list: f.list ? "dl-" + f.k : null });
+    el.value = toText(f, value);
+    el.addEventListener("input", () => onInput(fromText(f, el.value)));
+  }
+  const wrap = h("div", { class: "val" }, el);
+  if (f.pick && !disabled) {
+    wrap.append(h("button", { class: "small picker-btn", onclick: () => {
+      const start = f.t === "list" ? (value || []).at(-1) : value;
+      pickFolder(start, (path) => {
+        const nv = f.t === "list" ? [...(value || []).filter((x) => x !== path), path] : path;
+        value = nv;
+        el.value = toText(f, nv);
+        onInput(nv);
+      });
+    } }, f.pick === "append" ? "Add folder…" : "Choose…"));
+  }
+  if (f.list) wrap.append(h("datalist", { id: "dl-" + f.k }, f.list.map((o) => h("option", { value: o }))));
+  return wrap;
+}
+
+// Global, non-layered fields.
+function globalRow(f) {
+  const v = getPath(model, f.k) ?? f.def;
+  return h("div", { class: "row" },
+    h("label", { class: "name" }, f.l),
+    h("div", {}, control(f, v, false, (nv) => { setPath(model, f.k, nv); changed(); }), f.help ? h("div", { class: "help" }, f.help) : null));
+}
+
+// Layered field: "override" toggles whether the key exists in this layer.
+function layerRow(f, layerObj, parent, parentName) {
+  const own = hasPath(layerObj, f.k);
+  const shown = own ? getPath(layerObj, f.k) : getPath(parent, f.k);
+  const row = h("div", { class: "row" + (own ? " overridden" : "") });
+  const ov = h("input", { type: "checkbox", checked: own, title: "Override in this layer" });
+  let ctl = control(f, shown, !own, (nv) => { setPath(layerObj, f.k, nv); changed(); });
+  const from = h("div", { class: "from" }, own ? "" : "inherited from: " + parentName);
+  ov.addEventListener("change", () => {
+    if (ov.checked) setPath(layerObj, f.k, clone(getPath(parent, f.k) ?? (f.t === "list" ? [] : "")));
+    else delPath(layerObj, f.k);
+    changed();
+    row.replaceWith(layerRow(f, layerObj, parent, parentName));
+  });
+  row.append(
+    h("label", { class: "name" }, f.l),
+    h("div", {},
+      h("div", { class: "ctl" }, h("label", { class: "ov" }, ov, "override"), ctl),
+      f.help ? h("div", { class: "help" }, f.help) : null, from));
+  return row;
+}
+
+function settingsCards(layerObj, parent, parentName, isRepo) {
+  const groups = [];
+  for (const f of SETTINGS) {
+    if (f.repoOnly && !isRepo) continue;
+    let g = groups.find((x) => x.name === f.g);
+    if (!g) groups.push((g = { name: f.g, fields: [] }));
+    g.fields.push(f);
+  }
+  return groups.map((g) => h("div", { class: "card" }, h("h3", {}, g.name),
+    g.fields.map((f) => f.repoOnly ? globalLikeRepoRow(f, layerObj) : layerRow(f, layerObj, parent, parentName))));
+}
+
+// path is never inherited.
+function globalLikeRepoRow(f, layerObj) {
+  return h("div", { class: "row" },
+    h("label", { class: "name" }, f.l),
+    h("div", {}, control(f, layerObj[f.k] || "", false, (nv) => { if (nv) layerObj[f.k] = nv; else delete layerObj[f.k]; changed(); }),
+      h("div", { class: "help" }, f.help)));
+}
+
+// ---- views ---------------------------------------------------------------
+
+function renderNav() {
+  const n = Object.keys(model.repos || {}).length;
+  const unconf = clones.filter((c) => !c.configured).length;
+  const items = [
+    ["global", "General"], ["defaults", "Repo defaults"], ["repos", "Repositories", n],
+    ["scan", "Add from scan", unconf], ["json", "JSON"],
+  ];
+  const nav = $("#nav"); nav.replaceChildren();
+  for (const [tab, label, count] of items) {
+    nav.append(h("a", { class: route.tab === tab || (tab === "repos" && route.tab === "repo") ? "active" : "", onclick: () => go({ tab }) },
+      label, count ? h("span", { class: "count" }, count) : null));
+  }
+}
+
+function go(r) { route = r; render(); window.scrollTo(0, 0); }
+
+function render() {
+  renderNav();
+  const v = $("#view"); v.replaceChildren();
+  ({ global: viewGlobal, defaults: viewDefaults, repos: viewRepos, repo: viewRepo, scan: viewScan, json: viewJSON })[route.tab](v);
+}
+
+function viewGlobal(v) {
+  v.append(h("h2", {}, "General"), h("p", { class: "lead" }, "App-wide settings: where PR/MRs come from, where to look for clones, how often to check, which AI and model."));
+  const groups = [];
+  for (const f of GLOBAL) {
+    const name = f.g || "App";
+    let g = groups.find((x) => x.name === name);
+    if (!g) groups.push((g = { name, fields: [] }));
+    g.fields.push(f);
+  }
+  for (const g of groups) v.append(h("div", { class: "card" }, h("h3", {}, g.name), g.fields.map(globalRow)));
+}
+
+function viewDefaults(v) {
+  v.append(h("h2", {}, "Repo defaults"),
+    h("p", { class: "lead" }, "Apply to every repo unless it overrides them. Tick “override” to change a built-in value; untick to go back to it."),
+    ...settingsCards(defaultsLayer(), parentOf("defaults"), "built-in", false));
+}
+
+function methodText(m) {
+  if (!m) return "";
+  return m.kind === "skill" ? "skill:" + m.skill : m.kind;
+}
+
+function viewRepos(v) {
+  const q = h("input", { type: "text", placeholder: "Search repos…", value: route.q || "" });
+  const add = h("input", { type: "text", placeholder: "host/group/project", spellcheck: "false" });
+  const tbody = h("tbody");
+  const fill = () => {
+    tbody.replaceChildren();
+    const keys = Object.keys(model.repos || {}).sort().filter((k) => k.toLowerCase().includes(q.value.toLowerCase()));
+    for (const k of keys) {
+      const raw = model.repos[k];
+      const own = typeof raw === "string" ? { path: raw } : raw || {};
+      const eff = serverEff[k]?.settings || {};
+      const overrides = countOverrides(own);
+      tbody.append(h("tr", { class: "click", onclick: () => go({ tab: "repo", key: k }) },
+        h("td", {}, h("div", { class: "mono" }, k), h("div", { class: "muted mono" }, own.path || "— (auto-mapped)")),
+        h("td", {}, h("span", { class: "badge" + (eff.mode === "open" ? " accent" : "") }, eff.mode || "?"),
+          eff.on_new && eff.on_new !== "ask" ? h("span", { class: "badge" }, eff.on_new) : null),
+        h("td", {}, h("span", { class: "badge" }, methodText(serverEff[k]?.method))),
+        h("td", { class: "muted" }, overrides ? overrides + " overridden" : "")));
+    }
+    if (!keys.length) tbody.append(h("tr", {}, h("td", { colspan: 4, class: "muted" }, "No repos.")));
+  };
+  q.addEventListener("input", () => { route.q = q.value; fill(); });
+  v.append(h("h2", {}, "Repositories"),
+    h("p", { class: "lead" }, "Maps each repo (key = host/path as in the URL) to a local clone, plus per-repo setting overrides."),
+    h("div", { class: "toolbar" }, q, h("span", { style: "flex:1" }), add,
+      h("button", { onclick: () => {
+        const k = add.value.trim().replace(/^https?:\/\//, "").replace(/\.git$/, "").replace(/\/+$/, "");
+        if (!k.includes("/")) return;
+        model.repos[k] ||= {}; changed(); go({ tab: "repo", key: k });
+      } }, "Add repo")),
+    h("div", { class: "card" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Repo / clone"), h("th", {}, "Mode"), h("th", {}, "Review"), h("th", {}, ""))), tbody)));
+  fill();
+}
+
+function countOverrides(own) {
+  let n = 0;
+  const walk = (o) => { for (const [k, v] of Object.entries(o)) { if (k === "path") continue; if (v && typeof v === "object" && !Array.isArray(v)) walk(v); else n++; } };
+  walk(own);
+  return n;
+}
+
+function viewRepo(v) {
+  const key = route.key;
+  if (!(key in (model.repos || {}))) return go({ tab: "repos" });
+  const layer = repoObj(key);
+  v.append(
+    h("div", { class: "back" }, h("button", { class: "small", onclick: () => go({ tab: "repos" }) }, "← Repositories")),
+    h("h2", { class: "mono" }, key),
+    h("div", { class: "eff", id: "eff" }),
+    ...settingsCards(layer, parentOf("repo"), "defaults", true),
+    h("button", { class: "danger", onclick: () => {
+      if (!confirmInline(v, "Remove " + key + " from the config?")) return;
+      delete model.repos[key]; changed(); go({ tab: "repos" });
+    } }, "Remove repo from config"));
+  updateEff();
+}
+
+// confirm() would block; a second click within 3s confirms instead.
+let confirmAt = 0;
+function confirmInline(v, msg) {
+  if (Date.now() - confirmAt < 3000) { confirmAt = 0; return true; }
+  confirmAt = Date.now(); setStatus(msg + " Click again to confirm.", "dirty");
+  return false;
+}
+
+function updateEff() {
+  const el = $("#eff");
+  if (!el || route.tab !== "repo") return;
+  const e = serverEff[route.key];
+  if (!e) { el.textContent = ""; return; }
+  const s = e.settings, m = e.method;
+  el.replaceChildren(...["Result: ", h("span", { class: "badge accent" }, s.mode), h("span", { class: "badge" }, "on_new: " + s.on_new),
+    h("span", { class: "badge" }, "review: " + methodText(m)),
+    m?.note ? h("span", { class: "badge warn" }, m.note) : null,
+    s.path ? null : h("span", { class: "badge warn" }, "no path")].filter((x) => x != null));
+}
+
+function viewScan(v) {
+  const todo = clones.filter((c) => !c.configured);
+  const tbody = h("tbody");
+  for (const c of todo) {
+    tbody.append(h("tr", {},
+      h("td", {}, h("div", { class: "mono" }, c.key), h("div", { class: "muted mono" }, c.dir)),
+      h("td", {}, h("button", { class: "small", onclick: (ev) => {
+        model.repos[c.key] = { path: c.dir }; c.configured = true; changed();
+        ev.target.closest("tr").remove(); renderNav();
+      } }, "Add"))));
+  }
+  v.append(h("h2", {}, "Add from scan"),
+    h("p", { class: "lead" }, "Local clones in the project folders (General → Project folders), on the configured GitHub/GitLab hosts, that are not in the repositories yet." +
+      (model.auto_map === false ? "" : " Automatic mapping is on — the app will add them itself; here you can do it right away.")),
+    h("div", { class: "toolbar" }, h("button", { onclick: async () => {
+      if (dirty && !(await validate())) return;
+      try { const c = await api("/api/validate", { raw: model }); serverEff = c.effective || {}; } catch (_) {}
+      await rescan(); render();
+    } }, "Scan now")),
+    todo.length ? h("div", { class: "toolbar" }, h("button", { onclick: () => {
+      for (const c of todo) { model.repos[c.key] = { path: c.dir }; c.configured = true; }
+      changed(); render();
+    } }, "Add all (" + todo.length + ")")) : null,
+    h("div", { class: "card" }, todo.length ? h("table", {}, tbody) : h("p", { class: "muted" }, "All clones found are already in the config.")));
+}
+
+function viewJSON(v) {
+  const ta = h("textarea", { rows: 32, spellcheck: "false" });
+  ta.value = JSON.stringify(model, null, 2);
+  const msg = h("span", { class: "muted" });
+  v.append(h("h2", {}, "JSON"),
+    h("p", { class: "lead" }, "The file is written to disk exactly like this. You can edit it by hand; “Apply” carries the changes into the forms."),
+    h("div", { class: "toolbar" }, h("button", { onclick: () => {
+      try { model = JSON.parse(ta.value); model.repos ||= {}; changed(); msg.textContent = "applied"; }
+      catch (e) { msg.textContent = "Invalid JSON: " + e.message; }
+    } }, "Apply"), msg),
+    ta);
+}
+
+// rescan asks the server to scan the (possibly unsaved) folders again.
+async function rescan() {
+  try { const r = await api("/api/scan", { raw: model }); clones = r.clones || []; setStatus("scanned: " + clones.length + " clones", "ok"); }
+  catch (e) { showError(e.message); }
+}
+
+// ---- folder picker ---------------------------------------------------------
+// Browsers never reveal real paths (showDirectoryPicker gives a handle, not
+// a path), so the app lists directories for us.
+
+let pk = { path: "", done: null };
+async function pickFolder(start, done) {
+  pk.done = done;
+  $("#picker").style.display = "flex";
+  await pkGo(start || "~");
+}
+async function pkGo(path) {
+  try {
+    const r = await api("/api/ls?path=" + encodeURIComponent(path) + ($("#pkHidden").checked ? "&hidden=1" : ""));
+    pk.path = r.path;
+    const crumbs = $("#pkCrumbs"); crumbs.replaceChildren();
+    const abs = r.abs.split("/").filter(Boolean);
+    crumbs.append(h("a", { onclick: () => pkGo("/") }, "/"));
+    abs.forEach((part, i) => {
+      const p = "/" + abs.slice(0, i + 1).join("/");
+      crumbs.append(h("a", { onclick: () => pkGo(p) }, part), i < abs.length - 1 ? "/" : "");
+    });
+    crumbs.append(" ", h("a", { onclick: () => pkGo("~"), title: "Home directory" }, "⌂"));
+    const list = $("#pkList"); list.replaceChildren();
+    if (r.parent) list.append(h("li", { onclick: () => pkGo(r.parent) }, "↩ .."));
+    for (const d of r.dirs) {
+      list.append(h("li", { onclick: () => pkGo(d.path), ondblclick: () => pkPick(d.path), title: d.path },
+        d.git ? "📦" : "📁", d.name, d.key ? h("span", { class: "k" }, d.key) : null));
+    }
+    if (!r.dirs.length) list.append(h("li", { class: "muted" }, "(no subfolders)"));
+    const repos = r.dirs.filter((d) => d.git).length;
+    $("#pkHint").textContent = r.path + (repos ? ` · ${repos} git repos inside` : "");
+  } catch (e) { $("#pkHint").textContent = e.message; }
+}
+function pkPick(path) {
+  $("#picker").style.display = "none";
+  if (pk.done) pk.done(path || pk.path);
+}
+$("#pkOk").addEventListener("click", () => pkPick());
+$("#pkCancel").addEventListener("click", () => { $("#picker").style.display = "none"; });
+$("#pkHidden").addEventListener("change", () => pkGo(pk.path));
+$("#picker").addEventListener("click", (e) => { if (e.target.id === "picker") $("#picker").style.display = "none"; });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("#picker").style.display = "none"; });
+
+// ---- lifecycle -----------------------------------------------------------
+
+async function load() {
+  try {
+    const r = await api("/api/config");
+    model = r.raw; model.repos ||= {};
+    builtin = r.builtin; serverEff = r.effective || {}; clones = r.clones || [];
+    $("#path").textContent = r.path + (r.exists ? "" : " (new file)");
+    dirty = !r.exists;
+    $("#btnSave").disabled = !dirty;
+    setStatus(r.exists ? "loaded" : "new config — save to create it", r.exists ? "ok" : "dirty");
+    showError("");
+    render();
+  } catch (e) { showError(e.message); }
+}
+
+$("#btnSave").addEventListener("click", async () => {
+  if (!(await validate())) return;
+  try {
+    const r = await api("/api/save", { raw: model });
+    dirty = false; $("#btnSave").disabled = true;
+    setStatus("saved " + r.saved + " — the app picks it up on the next check", "ok");
+    const c = await api("/api/config"); clones = c.clones || []; serverEff = c.effective || {}; renderNav();
+  } catch (e) { showError(e.message); setStatus("not saved", "err"); }
+});
+$("#btnReload").addEventListener("click", () => { if (!dirty || confirmInline(null, "Discard unsaved changes?")) load(); });
+$("#btnDoctor").addEventListener("click", () => window.open("/doctor?t=" + encodeURIComponent(TOKEN), "juhas-doctor"));
+$("#btnClose").addEventListener("click", async () => {
+  if (dirty && !confirmInline(null, "There are unsaved changes — close anyway?")) return;
+  await api("/api/close", {}).catch(() => {});
+  document.body.replaceChildren(h("main", {}, h("h2", {}, "Session ended"), h("p", { class: "lead" }, "You can close this tab. Reopen Settings from the tray icon menu.")));
+  window.close();
+});
+window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+load();
+</script>
+</body>
+</html>

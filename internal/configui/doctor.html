@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Juhas — Diagnostics</title>
+<link rel="icon" id="fav" href="data:,">
+<style>
+:root { --bg: #f6f7f9; --panel: #fff; --text: #1d2125; --muted: #626f7a; --line: #dfe3e8; --accent: #2f81f7; --ok: #1f883d; --warn: #b7791f; --err: #cf222e; --chip: #eef1f4; color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111418; --panel: #191d22; --text: #e6e9ec; --muted: #9aa4ae; --line: #2c333a; --accent: #58a6ff; --ok: #3fb950; --warn: #d29922; --err: #f85149; --chip: #232a31; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, Cantarell, sans-serif; }
+header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 20px; display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; }
+header h1 { margin: 0; font-size: 15px; }
+.sum { color: var(--muted); font-size: 13px; flex: 1; min-width: 200px; }
+.sum b.ok { color: var(--ok); } .sum b.warn { color: var(--warn); } .sum b.err { color: var(--err); }
+button { font: inherit; font-size: 13px; padding: 5px 11px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; white-space: nowrap; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .5; cursor: default; }
+main { max-width: 980px; margin: 0 auto; padding: 16px 20px 60px; }
+.banner { padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; border: 1px solid var(--err); color: var(--err); }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
+section h2 { margin: 0; font-size: 13px; padding: 8px 14px; background: var(--chip); display: flex; gap: 8px; align-items: center; }
+section h2 .n { color: var(--muted); font-weight: 400; }
+.row { display: grid; grid-template-columns: 22px 1fr; gap: 4px 8px; padding: 8px 14px; border-top: 1px solid var(--line); }
+section h2 + .row { border-top: 0; }
+.lv { font-weight: 700; text-align: center; }
+.lv.l0 { color: var(--ok); } .lv.l1 { color: var(--warn); } .lv.l2 { color: var(--err); }
+.msg { word-break: break-word; }
+.row.l1 .msg, .row.l2 .msg { font-weight: 600; }
+.hint { grid-column: 2; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hint code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--chip); padding: 3px 7px; border-radius: 5px; word-break: break-all; }
+.hint button { font-size: 12px; padding: 2px 8px; }
+.only label { font-size: 13px; color: var(--muted); }
+.note { color: var(--muted); font-size: 12.5px; margin-top: 18px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🩺 Diagnostics</h1>
+  <span class="sum" id="sum">checking…</span>
+  <label class="only"><input type="checkbox" id="onlyBad"> problems only</label>
+  <button id="btnRun" class="primary">Run again</button>
+  <button id="btnAI" title="Sends a short prompt to Claude and Codex — costs a few tokens">Check with an AI call</button>
+</header>
+<main>
+  <div id="banner"></div>
+  <div id="list"></div>
+  <p class="note" id="mins"></p>
+</main>
+<script>
+"use strict";
+const T = new URLSearchParams(location.search).get("t");
+const $ = (s) => document.querySelector(s);
+const h = (tag, attrs = {}, ...kids) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (v === true) el.setAttribute(k, "");
+    else if (v !== false && v != null) el.setAttribute(k, v);
+  }
+  for (const kid of kids.flat(Infinity)) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : String(kid));
+  return el;
+};
+async function api(path, body) {
+  const r = await fetch(path, { method: body ? "POST" : "GET", headers: { "X-Token": T, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({ error: "HTTP " + r.status }));
+  if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+  return j;
+}
+const SYM = ["✓", "!", "✗"];
+const FAV = ["%231f883d", "%23d29922", "%23cf222e"];
+let last = null;
+
+function favicon(worst) {
+  $("#fav").href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='${FAV[worst]}'/%3E%3Cpath d='M16 8v16M8 16h16' stroke='white' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E`;
+}
+
+// a hint is often "cmd or: other cmd" or "a  |  b": offer each command to copy
+function hintParts(hint) {
+  return hint.split(/\s+(?:or:|\|)\s+/).map((s) => s.trim()).filter(Boolean);
+}
+function looksLikeCommand(s) { return /^(brew|sudo|npm|curl|claude|codex|gh|glab|git|xcode-select|juhas)\b/.test(s); }
+
+function render() {
+  if (!last) return;
+  const rep = last.report, only = $("#onlyBad").checked;
+  const n = [0, 0, 0];
+  rep.checks.forEach((c) => n[c.level]++);
+  const worst = n[2] ? 2 : n[1] ? 1 : 0;
+  favicon(worst);
+  document.title = (worst ? SYM[worst] + " " : "") + "Juhas — Diagnostics";
+  $("#sum").replaceChildren(h("b", { class: "ok" }, n[0] + " ok"), ", ", h("b", { class: n[1] ? "warn" : "" }, n[1] + " warnings"), ", ",
+    h("b", { class: n[2] ? "err" : "" }, n[2] + " errors"), " · " + new Date(rep.at).toLocaleString());
+  const groups = [];
+  for (const c of rep.checks) {
+    let g = groups.find((x) => x.name === c.section);
+    if (!g) groups.push(g = { name: c.section, checks: [] });
+    g.checks.push(c);
+  }
+  $("#list").replaceChildren(...groups.map((g) => {
+    const rows = g.checks.filter((c) => !only || c.level > 0);
+    if (!rows.length) return null;
+    const bad = g.checks.filter((c) => c.level > 0).length;
+    return h("section", {},
+      h("h2", {}, g.name, h("span", { class: "n" }, bad ? `${bad} to fix` : "all ok")),
+      rows.map((c) => h("div", { class: "row l" + c.level },
+        h("span", { class: "lv l" + c.level }, SYM[c.level]),
+        h("span", { class: "msg" }, c.msg),
+        c.hint ? h("div", { class: "hint" }, hintParts(c.hint).map((p) => looksLikeCommand(p)
+          ? [h("code", {}, p), h("button", { onclick: (e) => copy(p, e.target) }, "copy")]
+          : h("span", { class: "msg" }, "→ " + p))) : null)));
+  }).filter(Boolean));
+  if (only && !$("#list").children.length) $("#list").append(h("p", {}, "✓ No problems."));
+  $("#mins").textContent = "Minimum versions: " + Object.entries(last.min).map(([k, v]) => `${k} ${v}`).join(", ") +
+    ". Checks run in the same environment as the tray icon (PATH, Keychain), so the result matches what the app sees.";
+}
+
+async function copy(text, btn) {
+  try { await navigator.clipboard.writeText(text); btn.textContent = "copied"; }
+  catch { btn.textContent = "select and copy"; }
+  setTimeout(() => (btn.textContent = "copy"), 1500);
+}
+
+async function run(path, body, label) {
+  $("#btnRun").disabled = $("#btnAI").disabled = true;
+  $("#sum").textContent = label;
+  $("#banner").replaceChildren();
+  try { last = await api(path, body); render(); }
+  catch (e) { $("#banner").replaceChildren(h("div", { class: "banner" }, e.message)); $("#sum").textContent = ""; }
+  $("#btnRun").disabled = $("#btnAI").disabled = false;
+}
+$("#btnRun").addEventListener("click", () => run("/api/doctor/run", { with_ai: false }, "checking…"));
+$("#btnAI").addEventListener("click", () => run("/api/doctor/run", { with_ai: true }, "checking with an AI call (up to 2 min)…"));
+$("#onlyBad").addEventListener("change", render);
+run("/api/doctor", null, "loading…");
+</script>
+</body>
+</html>

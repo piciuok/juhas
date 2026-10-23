@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Juhas — Review proposal</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='5' width='26' height='19' rx='4' fill='%23a371f7'/%3E%3Cpath d='M9 24l-2 6 8-6z' fill='%23a371f7'/%3E%3Cpath d='M9 14l4 4 9-9' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root { --bg: #f6f7f9; --panel: #fff; --text: #1d2125; --muted: #626f7a; --line: #dfe3e8; --accent: #2f81f7; --ok: #1f883d; --warn: #b7791f; --err: #cf222e; --chip: #eef1f4; --input: #fff; color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111418; --panel: #191d22; --text: #e6e9ec; --muted: #9aa4ae; --line: #2c333a; --accent: #58a6ff; --ok: #3fb950; --warn: #d29922; --err: #f85149; --chip: #232a31; --input: #0f1216; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, Cantarell, sans-serif; }
+header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 20px; display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; }
+header h1 { margin: 0; font-size: 15px; flex: 1; min-width: 240px; }
+header h1 a { color: var(--text); text-decoration: none; } header h1 a:hover { color: var(--accent); }
+.sub { color: var(--muted); font-size: 12.5px; font-weight: 400; display: block; }
+button { font: inherit; font-size: 13px; padding: 5px 11px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; white-space: nowrap; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ok.on { background: var(--ok); border-color: var(--ok); color: #fff; }
+button.no.on { background: var(--err); border-color: var(--err); color: #fff; }
+button:disabled { opacity: .5; cursor: default; }
+main { max-width: 980px; margin: 0 auto; padding: 16px 20px 80px; }
+.banner { padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; border: 1px solid; }
+.banner.warn { border-color: var(--warn); color: var(--warn); }
+.banner.err { border-color: var(--err); color: var(--err); }
+.banner.ok { border-color: var(--ok); color: var(--ok); }
+.verdict { margin: 0 0 14px; font-size: 15px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.card.accepted { border-color: var(--ok); }
+.card.rejected { opacity: .5; }
+.card.posted { border-color: var(--accent); }
+.card.failed { border-color: var(--err); }
+.top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.loc { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; font-weight: 600; word-break: break-all; }
+.sev { font-size: 11.5px; padding: 1px 7px; border-radius: 9px; background: var(--chip); }
+.sev.BLOCK, .sev.high { color: var(--err); } .sev.WARN, .sev.medium { color: var(--warn); }
+.spacer { flex: 1; }
+textarea { width: 100%; min-height: 70px; font: 13.5px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, sans-serif; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--input); color: var(--text); resize: vertical; }
+textarea:disabled { border-style: dashed; color: var(--muted); }
+.note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.note a { color: var(--accent); }
+.note.err { color: var(--err); }
+footer { position: fixed; bottom: 0; left: 0; right: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 10px 20px; display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+footer .count { color: var(--muted); font-size: 13px; margin-right: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Review proposal</h1>
+  <button id="acceptAll">Accept all</button>
+  <button id="rejectAll">Reject all</button>
+</header>
+<main>
+  <div id="banners"></div>
+  <p class="verdict" id="verdict"></p>
+  <div id="list"></div>
+</main>
+<footer>
+  <span class="count" id="count"></span>
+  <span id="saved" class="count" style="margin-right:0"></span>
+  <button class="primary" id="publish" disabled>Publish accepted</button>
+</footer>
+<script>
+"use strict";
+const q = new URLSearchParams(location.search);
+const T = q.get("t"), JOB = q.get("job");
+const $ = (s) => document.querySelector(s);
+const h = (tag, attrs = {}, ...kids) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (v === true) el.setAttribute(k, "");
+    else if (v !== false && v != null) el.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : String(kid));
+  return el;
+};
+async function api(path, body) {
+  const r = await fetch(path, { method: body ? "POST" : "GET", headers: { "X-Token": T, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({ error: "HTTP " + r.status }));
+  if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+  return j;
+}
+
+let P = null, stale = false, confirmForce = 0;
+const all = () => (P.summary && P.summary.body ? [P.summary] : []).concat(P.comments || []);
+const LABEL = { pending: "awaiting decision", accepted: "accepted", rejected: "rejected", posted: "published", failed: "publish failed" };
+
+let saveTimer = null;
+function save() {
+  clearTimeout(saveTimer);
+  $("#saved").textContent = "…";
+  saveTimer = setTimeout(async () => {
+    try {
+      // the page stays the source of truth: replacing P here would leave the
+      // cards bound to the old objects and swallow the next clicks
+      await api("/api/review/save", { job: JOB, comments: all().map((c) => ({ id: c.id, body: c.body, status: c.status })) });
+      $("#saved").textContent = "saved"; counts();
+    } catch (e) { $("#saved").textContent = "save failed: " + e.message; }
+  }, 400);
+}
+
+function counts() {
+  const a = all();
+  const acc = a.filter((c) => c.status === "accepted").length;
+  const pend = a.filter((c) => c.status === "pending").length;
+  const posted = a.filter((c) => c.status === "posted").length;
+  $("#count").textContent = `${acc} accepted · ${pend} awaiting decision · ${posted} published`;
+  $("#publish").disabled = acc === 0;
+  $("#publish").textContent = acc ? `Publish accepted (${acc})` : "Publish accepted";
+}
+
+function card(c) {
+  const posted = c.status === "posted";
+  const ta = h("textarea", { disabled: posted || c.status === "rejected" });
+  ta.value = c.body;
+  ta.addEventListener("input", () => { c.body = ta.value; save(); });
+  const set = (st) => { c.status = c.status === st ? "pending" : st; save(); render(); };
+  const loc = c.id === "summary" ? "General comment" : (c.line > 0 ? `${c.file}:${c.line}` : c.file);
+  return h("div", { class: "card " + c.status },
+    h("div", { class: "top" },
+      h("span", { class: "loc" }, loc),
+      c.severity ? h("span", { class: "sev " + c.severity }, c.severity) : null,
+      h("span", { class: "sev" }, LABEL[c.status] || c.status),
+      h("span", { class: "spacer" }),
+      posted ? null : h("button", { class: "ok" + (c.status === "accepted" ? " on" : ""), onclick: () => set("accepted") }, "✓ Accept"),
+      posted ? null : h("button", { class: "no" + (c.status === "rejected" ? " on" : ""), onclick: () => set("rejected") }, "✕ Reject")),
+    ta,
+    posted ? h("div", { class: "note" }, "published: ", h("a", { href: c.posted, target: "_blank", rel: "noopener" }, "view in PR/MR"), c.note ? " · " + c.note : "") : null,
+    c.status === "failed" ? h("div", { class: "note err" }, c.error || "error") : null,
+    !posted && c.status !== "rejected" ? h("div", { class: "note" }, "You can edit the text before accepting; it saves automatically.") : null);
+}
+
+function render() {
+  const list = $("#list"); list.replaceChildren(...all().map(card));
+  if (!all().length) list.append(h("p", { class: "note" }, "The agent proposed no comments."));
+  counts();
+}
+
+async function load() {
+  try {
+    const r = await api("/api/review?job=" + JOB);
+    P = r.proposal; stale = r.stale;
+    const ref = P.platform === "github" ? "#" + P.number : "!" + P.number;
+    $("#title").replaceChildren(h("a", { href: P.url, target: "_blank", rel: "noopener" }, `${ref} ${P.title}`),
+      h("span", { class: "sub" }, `${P.repo} · ${P.agent} · head ${String(P.head_sha || "").slice(0, 10)} · ${new Date(P.created_at).toLocaleString()}`));
+    document.title = `📝 ${ref} — review proposal`;
+    $("#verdict").textContent = P.verdict ? "Agent's verdict: " + P.verdict : "";
+    const b = $("#banners"); b.replaceChildren();
+    if (stale) b.append(h("div", { class: "banner warn" }, `New commits since the review (now ${String(r.head_now).slice(0, 10)}). Line numbers may be off — consider reviewing again.`));
+    if (r.lookup_error) b.append(h("div", { class: "banner err" }, "Couldn't check the PR/MR: " + r.lookup_error));
+    render();
+  } catch (e) { $("#banners").replaceChildren(h("div", { class: "banner err" }, e.message)); }
+}
+
+$("#acceptAll").addEventListener("click", () => { all().forEach((c) => { if (c.status === "pending" || c.status === "rejected") c.status = "accepted"; }); save(); render(); });
+$("#rejectAll").addEventListener("click", () => { all().forEach((c) => { if (c.status !== "posted") c.status = "rejected"; }); save(); render(); });
+$("#publish").addEventListener("click", async () => {
+  const force = stale && Date.now() - confirmForce < 5000;
+  if (stale && !force) { confirmForce = Date.now(); $("#saved").textContent = "There are new commits — click again within 5 s to publish anyway."; return; }
+  clearTimeout(saveTimer);
+  $("#publish").disabled = true; $("#publish").textContent = "Publishing…";
+  try {
+    await api("/api/review/save", { job: JOB, comments: all().map((c) => ({ id: c.id, body: c.body, status: c.status })) });
+    const r = await api("/api/review/publish", { job: JOB, force });
+    P = r.proposal; render();
+    const failed = all().filter((c) => c.status === "failed").length;
+    $("#banners").prepend(h("div", { class: "banner " + (failed ? "err" : "ok") }, failed ? `Published with errors (${failed}) — check the marked comments.` : "Published the accepted comments."));
+  } catch (e) {
+    $("#banners").prepend(h("div", { class: "banner err" }, e.message));
+    counts();
+  }
+});
+load();
+</script>
+</body>
+</html>
