@@ -52,11 +52,16 @@ func reason(j *state.Job, e queue.Entry, manual bool) string {
 		return ReasonChanged
 	case j.Status == state.Done && j.Stale(head) && j.AskedSHA != head:
 		return ReasonChanged // reviewed, then the author pushed
+	case j.Status == state.Pending && head != "" && j.AskedSHA != "" && j.AskedSHA != head:
+		return ReasonChanged // answered "Later" (or the dialog timed out), then the author pushed
 	case manual && (j.Status == state.Skipped || j.Status == state.Pending) && j.AskedSHA != "" && j.AskedSHA == head:
 		return ReasonAgain // answered "Skip"/"Later" before; same head
 	}
 	return ""
 }
+
+// maxBaselineTries is how many failing first polls stay silent.
+const maxBaselineTries = 5
 
 // Plan is what HandleNew decided for one poll.
 type Plan struct {
@@ -89,7 +94,14 @@ func Decide(st *state.State, snap *queue.Snapshot, autoMax int, manual bool) Pla
 				put(e, state.Pending)
 			}
 		}
-		st.Initialized = true
+		// A poll with errors (offline at login) may have missed whole hosts:
+		// keep recording the baseline, or the next poll asks about everything.
+		// A persistent error must not keep it silent forever, though.
+		if len(snap.Errors) == 0 || st.BaselineTries >= maxBaselineTries {
+			st.Initialized = true
+		} else {
+			st.BaselineTries++
+		}
 		p.Baseline = true
 		return p
 	}

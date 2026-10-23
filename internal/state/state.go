@@ -55,10 +55,11 @@ func (j *Job) Stale(headSHA string) bool {
 type State struct {
 	// Initialized is set after the first poll, which records the baseline
 	// without asking about every already-open PR/MR.
-	Initialized bool            `json:"initialized"`
-	UrgentAcked []string        `json:"urgent_acked,omitempty"`  // URLs whose flashing was acknowledged
-	UrgentZaps  []string        `json:"urgent_zapped,omitempty"` // URLs that already got the screen "kick"
-	Jobs        map[string]*Job `json:"jobs"`
+	Initialized   bool            `json:"initialized"`
+	BaselineTries int             `json:"baseline_tries,omitempty"` // first polls that had errors
+	UrgentAcked   []string        `json:"urgent_acked,omitempty"`   // URLs whose flashing was acknowledged
+	UrgentZaps    []string        `json:"urgent_zapped,omitempty"`  // URLs that already got the screen "kick"
+	Jobs          map[string]*Job `json:"jobs"`
 }
 
 func Dir() string {

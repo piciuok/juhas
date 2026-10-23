@@ -90,9 +90,9 @@ type ghSearch struct {
 		Viewer struct {
 			Login string `json:"login"`
 		} `json:"viewer"`
-		Search struct {
-			IssueCount int    `json:"issueCount"`
-			Nodes      []ghPR `json:"nodes"`
+		Search *struct {
+			IssueCount int     `json:"issueCount"`
+			Nodes      []*ghPR `json:"nodes"`
 		} `json:"search"`
 	} `json:"data"`
 	Errors []struct {
@@ -103,16 +103,28 @@ type ghSearch struct {
 func (g *GitHubForge) search(ctx context.Context, q string, first int) (*ghSearch, error) {
 	query := fmt.Sprintf(`query($q: String!) { viewer { login } search(query: $q, type: ISSUE, first: %d) { issueCount nodes { ... on PullRequest { %s } } } }`, first, ghPRFields)
 	out, err := runAs(ctx, g.acc, "gh", "api", "graphql", "--hostname", g.host, "-f", "q="+q, "-f", "query="+query)
-	if err != nil {
-		return nil, err
-	}
 	var res ghSearch
-	if err := json.Unmarshal(out, &res); err != nil {
-		return nil, fmt.Errorf("gh graphql (%s): %w", g.host, err)
+	if jerr := json.Unmarshal(out, &res); jerr != nil || res.Data.Search == nil {
+		// no usable data; gh exits non-zero on GraphQL errors, too
+		switch {
+		case err != nil:
+			return nil, err
+		case len(res.Errors) > 0:
+			return nil, fmt.Errorf("gh graphql (%s): %s", g.host, res.Errors[0].Message)
+		case jerr != nil:
+			return nil, fmt.Errorf("gh graphql (%s): %w", g.host, jerr)
+		}
+		return nil, fmt.Errorf("gh graphql (%s): empty search result", g.host)
 	}
-	if len(res.Errors) > 0 {
-		return nil, fmt.Errorf("gh graphql (%s): %s", g.host, res.Errors[0].Message)
+	// Partial errors (e.g. one PR in an org whose SAML SSO the token lacks)
+	// null out single nodes; keep the rest.
+	nodes := res.Data.Search.Nodes[:0]
+	for _, pr := range res.Data.Search.Nodes {
+		if pr != nil && pr.URL != "" {
+			nodes = append(nodes, pr)
+		}
 	}
+	res.Data.Search.Nodes = nodes
 	if l := res.Data.Viewer.Login; l != "" {
 		g.mu.Lock()
 		g.me = l
@@ -155,7 +167,7 @@ func (g *GitHubForge) Requested(ctx context.Context) ([]Item, error) {
 			if pr.URL == "" {
 				continue
 			}
-			it := g.item(pr, res.Data.Viewer.Login)
+			it := g.item(*pr, res.Data.Viewer.Login)
 			if strings.Contains(q, "review-requested") {
 				it.Requested = true // includes team requests, which item() cannot see
 			}
@@ -179,7 +191,7 @@ func (g *GitHubForge) Open(ctx context.Context, project string) ([]Item, error) 
 	var items []Item
 	for _, pr := range res.Data.Search.Nodes {
 		if pr.URL != "" {
-			items = append(items, g.item(pr, res.Data.Viewer.Login))
+			items = append(items, g.item(*pr, res.Data.Viewer.Login))
 		}
 	}
 	return items, nil

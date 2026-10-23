@@ -152,8 +152,7 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 		}
 		items, err := c.Forges[k].Requested(ctx)
 		if err != nil {
-			snap.Errors = append(snap.Errors, err.Error())
-			continue
+			snap.Errors = append(snap.Errors, err.Error()) // items may still hold what was fetched
 		}
 		for _, it := range items {
 			add(it)
@@ -179,7 +178,9 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 		items, err := f.Open(ctx, project)
 		if err != nil {
 			snap.Errors = append(snap.Errors, err.Error())
-			continue
+			if len(items) == 0 {
+				continue
+			}
 		}
 		openCount[strings.ToLower(key)] = len(items)
 		for _, it := range items {

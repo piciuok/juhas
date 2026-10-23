@@ -199,11 +199,14 @@ func (g *GitLabForge) countFiles(ctx context.Context, it *Item) (*Files, error) 
 }
 
 func (g *GitLabForge) fillApprovals(ctx context.Context, items []Item, me string) error {
+	failed, tried := 0, 0
+	var last error
 	for i := range items {
 		it := &items[i]
 		if it.Mine || it.Draft {
 			continue
 		}
+		tried++
 		_, project := SplitKey(it.Repo)
 		var ap struct {
 			ApprovedBy []struct {
@@ -212,13 +215,20 @@ func (g *GitLabForge) fillApprovals(ctx context.Context, items []Item, me string
 		}
 		path := fmt.Sprintf("projects/%s/merge_requests/%d/approvals", url.PathEscape(project), it.Number)
 		if err := g.api(ctx, path, &ap); err != nil {
-			return err
+			// one flaky call must not drop the whole host; unknown approvals
+			// only mean the MR may stay in the queue until the next poll
+			failed++
+			last = err
+			continue
 		}
 		for _, a := range ap.ApprovedBy {
 			if strings.EqualFold(a.User.Username, me) {
 				it.ApprovedByMe = true
 			}
 		}
+	}
+	if tried > 0 && failed == tried {
+		return last // e.g. offline: report it, like any other failed call
 	}
 	return nil
 }

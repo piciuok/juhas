@@ -112,3 +112,38 @@ func TestQuestionRecheck(t *testing.T) {
 		t.Errorf("%+v", q)
 	}
 }
+
+func TestDecideLaterThenPush(t *testing.T) {
+	st := &state.State{Initialized: true, Jobs: map[string]*state.Job{}}
+	snap := &queue.Snapshot{Entries: []queue.Entry{entry(1, "ask", "a", "/r")}}
+	if p := Decide(st, snap, 2, false); len(p.Ask) != 1 {
+		t.Fatal("new item not asked")
+	}
+	st.Job("u1").Status = state.Pending // "Later"
+	if p := Decide(st, snap, 2, false); len(p.Ask) != 0 {
+		t.Error("postponed item re-asked without new commits")
+	}
+	snap.Entries[0].HeadSHA = "a2"
+	if p := Decide(st, snap, 2, false); len(p.Ask) != 1 || p.Reasons["u1"] != ReasonChanged {
+		t.Errorf("postponed item with new commits must be asked again: %+v", p.Reasons)
+	}
+}
+
+func TestDecideBaselineWaitsForCleanPoll(t *testing.T) {
+	st := &state.State{Jobs: map[string]*state.Job{}}
+	offline := &queue.Snapshot{Errors: []string{"no network"}}
+	if p := Decide(st, offline, 2, false); !p.Baseline || st.Initialized {
+		t.Fatalf("failed first poll must not finish the baseline: %+v", st)
+	}
+	online := &queue.Snapshot{Entries: []queue.Entry{entry(1, "ask", "a", "/r")}}
+	if p := Decide(st, online, 2, false); !p.Baseline || len(p.Ask) != 0 || !st.Initialized {
+		t.Errorf("first clean poll is the baseline: %+v", p)
+	}
+	st2 := &state.State{Jobs: map[string]*state.Job{}}
+	for i := 0; i <= maxBaselineTries; i++ {
+		Decide(st2, offline, 2, false)
+	}
+	if !st2.Initialized {
+		t.Error("a persistent error must not keep the baseline open forever")
+	}
+}
