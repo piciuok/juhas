@@ -115,8 +115,8 @@ func (a Account) Env(ctx context.Context) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if strings.EqualFold(a.Host, "github.com") {
-			return []string{"GH_TOKEN=" + tok}, nil
+		if h := strings.ToLower(a.Host); h == "github.com" || strings.HasSuffix(h, ".ghe.com") {
+			return []string{"GH_TOKEN=" + tok}, nil // gh reads GH_TOKEN for github.com and GHE.com tenants
 		}
 		return []string{"GH_ENTERPRISE_TOKEN=" + tok, "GH_HOST=" + a.Host}, nil
 	}

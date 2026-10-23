@@ -302,14 +302,14 @@ func extractBinary(archive []byte) ([]byte, error) {
 // Replace atomically swaps the file at target for bin (same directory, so
 // the rename is atomic; the running process keeps its old inode).
 func Replace(target string, bin []byte) error {
-	if p, err := filepath.EvalSymlinks(target); err == nil {
-		target = p
+	if fi, err := os.Lstat(target); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		// e.g. Homebrew links into its Cellar: writing there corrupts its install
+		p, _ := filepath.EvalSymlinks(target)
+		return fmt.Errorf("%s links to %s — update Juhas with the tool that installed it", target, p)
 	}
 	tmp := target + ".update"
-	if err := os.WriteFile(tmp, bin, 0o755); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp, 0o755); err != nil {
+	if err := writeSynced(tmp, bin, 0o755); err != nil {
+		os.Remove(tmp)
 		return err
 	}
 	if err := os.Rename(tmp, target); err != nil {
@@ -358,5 +358,27 @@ func SaveStatus(path string, s Status) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o600)
+	if err := writeSynced(path+".tmp", b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(path+".tmp", path)
+}
+
+// writeSynced writes and fsyncs a file, so a rename over the old one never
+// leaves an empty file after a power loss.
+func writeSynced(path string, b []byte, mode os.FileMode) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	if _, err = f.Write(b); err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(path, mode)
+	}
+	return err
 }

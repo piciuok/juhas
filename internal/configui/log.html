@@ -40,7 +40,7 @@ const q = new URLSearchParams(location.search);
 const T = q.get("t"), JOB = q.get("job");
 const log = document.getElementById("log");
 const statusEl = document.getElementById("status");
-let offset = 0, timer = null;
+let offset = 0, run = "", timer = null;
 // favicon: a bolt coloured by status, so tabs of several runs tell apart
 const COLORS = { running: "%232f81f7", queued: "%239aa0a6", done: "%231f883d", failed: "%23cf222e" };
 const MARK = { running: "●", queued: "⏳", done: "✓", failed: "✗" };
@@ -72,12 +72,12 @@ function append(text) {
 }
 async function tick() {
   try {
-    const r = await fetch(`/api/log?job=${JOB}&offset=${offset}`, { headers: { "X-Token": T } });
+    const r = await fetch(`/api/log?job=${JOB}&offset=${offset}&run=${run}`, { headers: { "X-Token": T } });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
     if (j.reset) { log.replaceChildren(); }
     if (j.text) append(j.text);
-    offset = j.offset;
+    offset = j.offset; run = j.run || "";
     if (j.title) {
       document.getElementById("title").textContent = j.title;
       const ref = (j.url.match(/merge_requests\/(\d+)/) || [])[1] ? "!" + j.url.match(/merge_requests\/(\d+)/)[1]

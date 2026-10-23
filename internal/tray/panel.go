@@ -314,7 +314,10 @@ func (a *App) PanelDo(action, url, agent string, on bool) error {
 	case "settings":
 		a.openSettings()
 	case "briefs":
-		return platform.Open(config.Expand(a.cfg.BriefsDir))
+		a.mu.Lock()
+		dir := a.cfg.BriefsDir
+		a.mu.Unlock()
+		return platform.Open(config.Expand(dir))
 	default:
 		return errors.New("unknown action " + action)
 	}

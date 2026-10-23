@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -165,7 +166,7 @@ func (s *Server) reviewFile(w http.ResponseWriter, r *http.Request) (any, error)
 	for _, c := range p.Comments {
 		known = known || (file != "" && c.File == file)
 	}
-	if !known {
+	if !known || strings.HasPrefix(file, "/") || slices.Contains(strings.Split(file, "/"), "..") {
 		return nil, errors.New("this file is not part of the proposal")
 	}
 	platform, repo, num, err := forge.ParseURL(p.URL)
@@ -388,7 +389,12 @@ func start(path string, onSave func(), persistent bool) (*Server, string, error)
 		go s.Close()
 		return map[string]bool{"ok": true}, nil
 	}))
-	s.srv = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	s.srv = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// every page carries the token in its URL: never frame it, never send it on
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		mux.ServeHTTP(w, r)
+	}), ReadHeaderTimeout: 10 * time.Second}
 	s.idle = time.AfterFunc(IdleTimeout, func() {
 		if !s.Persistent {
 			s.Close()
@@ -445,11 +451,12 @@ func (s *Server) logChunk(w http.ResponseWriter, r *http.Request) (any, error) {
 	store := state.Open()
 	path := filepath.Join(store.LogDir(), id+".log")
 	offset, _ := strconv.ParseInt(r.URL.Query().Get("offset"), 10, 64)
-	resp := map[string]any{"offset": offset, "text": "", "status": "", "title": "", "url": "", "brief": "", "error": ""}
+	resp := map[string]any{"offset": offset, "text": "", "status": "", "title": "", "url": "", "brief": "", "error": "", "run": ""}
 	if st, err := store.Read(); err == nil {
 		for _, j := range st.Jobs {
 			if j.Log == path {
 				resp["status"], resp["title"], resp["url"], resp["brief"], resp["error"] = j.Status, j.Repo+" "+j.Title, j.URL, j.Brief, j.Error
+				resp["run"] = strconv.FormatInt(j.StartedAt.UnixNano(), 36)
 			}
 		}
 	}
@@ -461,8 +468,10 @@ func (s *Server) logChunk(w http.ResponseWriter, r *http.Request) (any, error) {
 		return nil, err
 	}
 	defer f.Close()
-	if fi, err := f.Stat(); err == nil && offset > fi.Size() {
-		offset = 0 // log was restarted by a new run
+	// a new run truncates and rewrites the same file: start over when the
+	// run changed (or the file got shorter)
+	if fi, err := f.Stat(); err == nil && (offset > fi.Size() || (r.URL.Query().Get("run") != "" && r.URL.Query().Get("run") != resp["run"])) {
+		offset = 0
 		resp["reset"] = true
 	}
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {

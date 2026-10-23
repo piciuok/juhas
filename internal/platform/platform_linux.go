@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 func Open(target string) error {
@@ -125,14 +126,19 @@ func Notify(n Notification) {
 	}
 	if n.Open != "" && notifySendActions() {
 		go func() {
-			out, err := exec.Command("notify-send", append(base, "--wait", "--action=open=Open", n.Title, trunc(n.Message, 300))...).Output()
+			// --wait blocks until the notification closes; servers that keep
+			// notifications around would pile up one process per notification
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+			defer cancel()
+			out, err := exec.CommandContext(ctx, "notify-send", append(base, "--wait", "--action=open=Open", "--", n.Title, trunc(n.Message, 300))...).Output()
 			if a := strings.TrimSpace(string(out)); err == nil && (a == "open" || a == "default") {
 				_ = Open(n.Open)
 			}
 		}()
 		return
 	}
-	_ = exec.Command("notify-send", append(base, n.Title, trunc(n.Message, 300))...).Start()
+	// "--": a PR title starting with "-" must not be read as an option
+	_ = exec.Command("notify-send", append(base, "--", n.Title, trunc(n.Message, 300))...).Start()
 }
 
 func desktopPath() string {
