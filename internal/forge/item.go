@@ -31,6 +31,8 @@ type Item struct {
 
 	Files *Files `json:"files,omitempty"` // nil = not fetched
 
+	Account string `json:"account,omitempty"` // Account.Key that found it ("" = the CLI's default)
+
 	Requested    bool `json:"requested"`      // my review was requested / I am a reviewer
 	Assigned     bool `json:"assigned"`       // I am an assignee
 	ApprovedByMe bool `json:"approved_by_me"` // my approval is on it
@@ -77,9 +79,10 @@ func (i Item) Ref() string {
 	return "#" + strconv.Itoa(i.Number)
 }
 
-// Forge lists PR/MRs from one host.
+// Forge lists PR/MRs from one host, as one account.
 type Forge interface {
 	Host() string
+	Account() Account
 	Platform() string
 	// Me is the authenticated username.
 	Me(ctx context.Context) (string, error)
@@ -121,4 +124,12 @@ func ParseURL(raw string) (platform, repo string, number int, err error) {
 		return GitHub, host + "/" + parts[0] + "/" + parts[1], n, nil
 	}
 	return "", "", 0, fmt.Errorf("unrecognised PR/MR URL: %q", raw)
+}
+
+// New returns the forge for an account.
+func New(a Account) Forge {
+	if a.Platform == GitLab {
+		return NewGitLab(a)
+	}
+	return NewGitHub(a)
 }

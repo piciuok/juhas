@@ -13,14 +13,19 @@ import (
 // GitLabForge talks to one GitLab host through `glab api`, reusing glab's auth.
 type GitLabForge struct {
 	host  string
+	acc   Account
 	me    string
 	mu    sync.Mutex
 	files map[string]*Files // by MR URL + head SHA
 }
 
-func NewGitLab(host string) *GitLabForge { return &GitLabForge{host: host} }
+func NewGitLab(a Account) *GitLabForge {
+	a.Platform = GitLab
+	return &GitLabForge{host: a.Host, acc: a}
+}
 
 func (g *GitLabForge) Host() string     { return g.host }
+func (g *GitLabForge) Account() Account { return g.acc }
 func (g *GitLabForge) Platform() string { return GitLab }
 
 type glUser struct {
@@ -48,7 +53,7 @@ type glMR struct {
 }
 
 func (g *GitLabForge) api(ctx context.Context, path string, v any) error {
-	out, err := run(ctx, nil, "glab", "api", "--hostname", g.host, path)
+	out, err := runAs(ctx, g.acc, "glab", "api", "--hostname", g.host, path)
 	if err != nil {
 		return err
 	}
@@ -248,6 +253,7 @@ func (g *GitLabForge) item(mr glMR, me string) Item {
 		Labels:       mr.Labels,
 		CreatedAt:    mr.CreatedAt,
 		Mine:         strings.EqualFold(mr.Author.Username, me),
+		Account:      g.acc.Key(),
 	}
 	for _, u := range mr.Reviewers {
 		if strings.EqualFold(u.Username, me) {

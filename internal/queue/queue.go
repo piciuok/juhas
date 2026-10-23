@@ -57,9 +57,11 @@ func (s *Snapshot) UrgentCount() int {
 
 // Collector holds the forges and a cached clone scan between polls.
 type Collector struct {
-	Cfg    *config.Config
-	Forges map[string]forge.Forge // by lower-case host
-	Now    func() time.Time
+	Cfg       *config.Config
+	Forges    map[string]forge.Forge // by account key: "host" or "host@user"
+	Order     []string               // Forges keys in config order ("" = sorted)
+	Unwatched map[string]bool        // accounts whose review requests are not checked
+	Now       func() time.Time
 
 	mu        sync.Mutex
 	clones    []scan.Clone
@@ -70,14 +72,57 @@ type Collector struct {
 var ScanEvery = 10 * time.Minute
 
 func NewCollector(cfg *config.Config) *Collector {
-	c := &Collector{Cfg: cfg, Forges: map[string]forge.Forge{}, Now: time.Now}
-	for _, h := range cfg.GitHub {
-		c.Forges[strings.ToLower(h.Host)] = forge.NewGitHub(h.Host)
+	c := &Collector{Cfg: cfg, Forges: map[string]forge.Forge{}, Unwatched: map[string]bool{}, Now: time.Now}
+	add := func(platform string, hosts []config.Host) {
+		for _, h := range hosts {
+			a := h.Account(platform)
+			c.Forges[a.Key()] = forge.New(a)
+			c.Order = append(c.Order, a.Key())
+			if !h.Watched() {
+				c.Unwatched[a.Key()] = true
+			}
+		}
 	}
-	for _, h := range cfg.GitLab {
-		c.Forges[strings.ToLower(h.Host)] = forge.NewGitLab(h.Host)
-	}
+	add(forge.GitHub, cfg.GitHub)
+	add(forge.GitLab, cfg.GitLab)
+	forge.SetAccounts(cfg.Accounts())
 	return c
+}
+
+func (c *Collector) order() []string {
+	if len(c.Order) > 0 {
+		return c.Order
+	}
+	keys := make([]string, 0, len(c.Forges))
+	for k := range c.Forges {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// ForRepo is the forge that reads a repository: its "account" setting when
+// set, else the host's first watched account, else its first one.
+func (c *Collector) ForRepo(host, user string) (forge.Forge, bool) {
+	host = strings.ToLower(host)
+	if user != "" {
+		f, ok := c.Forges[host+"@"+user]
+		return f, ok
+	}
+	var first forge.Forge
+	for _, k := range c.order() {
+		f := c.Forges[k]
+		if strings.ToLower(f.Host()) != host {
+			continue
+		}
+		if !c.Unwatched[k] {
+			return f, true
+		}
+		if first == nil {
+			first = f
+		}
+	}
+	return first, first != nil
 }
 
 // Collect runs one poll. Errors on one host or repo are recorded in the
@@ -88,6 +133,9 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 	var order []string
 	add := func(it forge.Item) {
 		if p, ok := byURL[it.URL]; ok {
+			if !p.Requested && !p.Assigned && (it.Requested || it.Assigned) {
+				p.Account = it.Account // act as the account that was asked
+			}
 			p.Requested = p.Requested || it.Requested
 			p.Assigned = p.Assigned || it.Assigned
 			p.ApprovedByMe = p.ApprovedByMe || it.ApprovedByMe
@@ -98,13 +146,11 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 		order = append(order, it.URL)
 	}
 
-	hosts := make([]string, 0, len(c.Forges))
-	for h := range c.Forges {
-		hosts = append(hosts, h)
-	}
-	sort.Strings(hosts)
-	for _, h := range hosts {
-		items, err := c.Forges[h].Requested(ctx)
+	for _, k := range c.order() {
+		if c.Unwatched[k] {
+			continue
+		}
+		items, err := c.Forges[k].Requested(ctx)
 		if err != nil {
 			snap.Errors = append(snap.Errors, err.Error())
 			continue
@@ -121,9 +167,13 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 			continue
 		}
 		host, project := forge.SplitKey(key)
-		f, ok := c.Forges[strings.ToLower(host)]
+		f, ok := c.ForRepo(host, s.Account)
 		if !ok {
-			snap.Errors = append(snap.Errors, fmt.Sprintf("%s: host %s is not in github/gitlab in the config", key, host))
+			who := host
+			if s.Account != "" {
+				who = s.Account + "@" + host
+			}
+			snap.Errors = append(snap.Errors, fmt.Sprintf("%s: account %s is not in github/gitlab in the config", key, who))
 			continue
 		}
 		items, err := f.Open(ctx, project)
@@ -156,9 +206,13 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 		}
 	}
 
+	mine := c.logins(ctx)
 	now := c.Now()
 	for _, u := range order {
 		it := *byURL[u]
+		if h, _ := forge.SplitKey(it.Repo); mine[strings.ToLower(h)+" "+strings.ToLower(it.Author)] {
+			it.Mine = true // authored by another of my accounts
+		}
 		key := it.Repo
 		if k, ok := c.Cfg.RepoKey(it.Repo); ok {
 			key = k
@@ -191,7 +245,7 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 		s, _ := c.Cfg.Effective(st.Key)
 		if st.Open < 0 && s.CountOpen && st.Queued > 0 {
 			host, project := forge.SplitKey(st.Key)
-			if f, ok := c.Forges[strings.ToLower(host)]; ok {
+			if f, ok := c.ForRepo(host, s.Account); ok {
 				if n, err := f.CountOpen(ctx, project); err == nil {
 					st.Open = n
 				} else {
@@ -213,6 +267,20 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 		return a.Number > b.Number
 	})
 	return snap
+}
+
+// logins are "host login" of every account (cached by the forges).
+func (c *Collector) logins(ctx context.Context) map[string]bool {
+	out := map[string]bool{}
+	for k, f := range c.Forges {
+		if c.Unwatched[k] {
+			continue
+		}
+		if me, err := f.Me(ctx); err == nil && me != "" {
+			out[strings.ToLower(f.Host())+" "+strings.ToLower(me)] = true
+		}
+	}
+	return out
 }
 
 // Keep applies the repository's filters to one item.

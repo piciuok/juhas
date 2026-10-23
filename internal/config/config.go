@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"juhas/internal/forge"
 )
 
 // Duration is a time.Duration that reads/writes as "3m", "48h", "".
@@ -71,8 +73,48 @@ func parseDuration(s string) (time.Duration, error) {
 	return v, nil
 }
 
+// Host is one account on a GitHub/GitLab host. Without User it is the CLI's
+// login (gh: the active account). User picks one of several gh accounts on
+// the same host; a second GitLab account needs its own glab config
+// directory (ConfigDir), since glab keeps one login per host.
 type Host struct {
-	Host string `json:"host"`
+	Host      string `json:"host"`
+	User      string `json:"user,omitempty"`
+	ConfigDir string `json:"config_dir,omitempty"`
+	Watch     *bool  `json:"watch,omitempty"` // false: kept, but its review requests are not checked
+}
+
+// Watched: the account's review requests are checked (default on).
+func (h Host) Watched() bool { return h.Watch == nil || *h.Watch }
+
+// Account is the forge account of a host entry.
+func (h Host) Account(platform string) forge.Account {
+	return forge.Account{Platform: platform, Host: strings.ToLower(h.Host), User: h.User, ConfigDir: Expand(h.ConfigDir)}
+}
+
+// Accounts lists every configured account, watched or not.
+func (c *Config) Accounts() []forge.Account {
+	var out []forge.Account
+	for _, h := range c.GitHub {
+		out = append(out, h.Account(forge.GitHub))
+	}
+	for _, h := range c.GitLab {
+		out = append(out, h.Account(forge.GitLab))
+	}
+	return out
+}
+
+// HostNames lists the distinct GitHub and GitLab hosts.
+func (c *Config) HostNames() []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, h := range append(append([]Host{}, c.GitHub...), c.GitLab...) {
+		if k := strings.ToLower(h.Host); !seen[k] {
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // Agent configures one AI CLI (claude, codex): its command and the
@@ -150,7 +192,8 @@ type Settings struct {
 	Flash         bool     `json:"flash"`
 	FlashDecide   bool     `json:"flash_decisions"` // blinking ? while a proposal waits for me
 	Language      Language `json:"language"`
-	Agent         string   `json:"agent"` // claude | codex
+	Agent         string   `json:"agent"`   // claude | codex
+	Account       string   `json:"account"` // which login reads the repo when a host has several ("" = the first)
 }
 
 // Language of what the review produces: the brief I read, and the comments
@@ -210,7 +253,8 @@ const builtinSettings = `{
   "flash": true,
   "flash_decisions": true,
   "language": { "brief": "en", "comments": "en" },
-  "agent": "claude"
+  "agent": "claude",
+  "account": ""
 }`
 
 // BuiltinSettings is the bottom settings layer as JSON (for the config UI).
@@ -359,6 +403,17 @@ func (c *Config) ScreenEffectOn() bool { return c.ScreenEffect == nil || *c.Scre
 
 // Validate resolves every repository once, so a typo fails at load time.
 func (c *Config) Validate() error {
+	seen := map[string]bool{}
+	for _, a := range c.Accounts() {
+		if a.Host == "" {
+			return fmt.Errorf("%s: an account without host", a.Platform)
+		}
+		k := a.Platform + " " + a.Key()
+		if seen[k] {
+			return fmt.Errorf("%s account %s is listed twice", a.Platform, a.Label())
+		}
+		seen[k] = true
+	}
 	if _, err := c.settings(nil); err != nil {
 		return fmt.Errorf("defaults: %w", err)
 	}

@@ -13,13 +13,18 @@ import (
 // gh's auth (keyring) and works the same for github.com and Enterprise.
 type GitHubForge struct {
 	host string
+	acc  Account
 	me   string
 	mu   sync.Mutex
 }
 
-func NewGitHub(host string) *GitHubForge { return &GitHubForge{host: host} }
+func NewGitHub(a Account) *GitHubForge {
+	a.Platform = GitHub
+	return &GitHubForge{host: a.Host, acc: a}
+}
 
 func (g *GitHubForge) Host() string     { return g.host }
+func (g *GitHubForge) Account() Account { return g.acc }
 func (g *GitHubForge) Platform() string { return GitHub }
 
 const ghPRFields = `
@@ -97,7 +102,7 @@ type ghSearch struct {
 
 func (g *GitHubForge) search(ctx context.Context, q string, first int) (*ghSearch, error) {
 	query := fmt.Sprintf(`query($q: String!) { viewer { login } search(query: $q, type: ISSUE, first: %d) { issueCount nodes { ... on PullRequest { %s } } } }`, first, ghPRFields)
-	out, err := run(ctx, nil, "gh", "api", "graphql", "--hostname", g.host, "-f", "q="+q, "-f", "query="+query)
+	out, err := runAs(ctx, g.acc, "gh", "api", "graphql", "--hostname", g.host, "-f", "q="+q, "-f", "query="+query)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +128,7 @@ func (g *GitHubForge) Me(ctx context.Context) (string, error) {
 	if me != "" {
 		return me, nil
 	}
-	out, err := run(ctx, nil, "gh", "api", "--hostname", g.host, "user", "--jq", ".login")
+	out, err := runAs(ctx, g.acc, "gh", "api", "--hostname", g.host, "user", "--jq", ".login")
 	if err != nil {
 		return "", err
 	}
@@ -202,6 +207,7 @@ func (g *GitHubForge) item(pr ghPR, me string) Item {
 		TargetBranch: pr.BaseRefName,
 		CreatedAt:    pr.CreatedAt,
 		Mine:         me != "" && strings.EqualFold(pr.Author.Login, me),
+		Account:      g.acc.Key(),
 	}
 	for _, l := range pr.Labels.Nodes {
 		it.Labels = append(it.Labels, l.Name)
@@ -241,7 +247,7 @@ func (g *GitHubForge) item(pr ghPR, me string) Item {
 func (g *GitHubForge) Get(ctx context.Context, project string, number int) (Item, error) {
 	owner, name, _ := strings.Cut(project, "/")
 	query := fmt.Sprintf(`query($o: String!, $n: String!, $num: Int!) { viewer { login } repository(owner: $o, name: $n) { pullRequest(number: $num) { %s } } }`, ghPRFields)
-	out, err := run(ctx, nil, "gh", "api", "graphql", "--hostname", g.host, "-f", "o="+owner, "-f", "n="+name, "-F", fmt.Sprintf("num=%d", number), "-f", "query="+query)
+	out, err := runAs(ctx, g.acc, "gh", "api", "graphql", "--hostname", g.host, "-f", "o="+owner, "-f", "n="+name, "-F", fmt.Sprintf("num=%d", number), "-f", "query="+query)
 	if err != nil {
 		return Item{}, err
 	}

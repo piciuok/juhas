@@ -66,6 +66,8 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-weak)
 .badge.warn { color: var(--warn); }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; word-break: break-all; }
 .muted { color: var(--muted); }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--chip); padding: 1px 5px; border-radius: 4px; user-select: all; }
+.toolbar select { width: auto; }
 .toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
 .toolbar input[type=text] { max-width: 320px; }
 .eff { font-size: 12.5px; color: var(--muted); margin: -6px 0 14px; }
@@ -148,8 +150,6 @@ const GLOBAL = [
   { k: "briefs_dir", t: "text", l: "Briefs folder", pick: "set" },
   { k: "scan_dirs", t: "list", pick: "append", l: "Project folders", help: "One per line, e.g. ~/Projects. Scanned (up to 3 levels deep); clones found there are linked to their GitHub/GitLab repos." },
   { k: "auto_map", t: "bool", def: true, l: "Map automatically", help: "Yes: every 10 min new clones in the project folders are added to the repositories and moved ones are re-linked. No: only manually in “Add from scan”." },
-  { k: "github", t: "hosts", l: "GitHub hosts", help: "One per line, e.g. github.com or a GitHub Enterprise host. Auth comes from `gh auth login`." },
-  { k: "gitlab", t: "hosts", l: "GitLab hosts", help: "One per line. Auth comes from `glab auth login --hostname …`." },
   { k: "concurrency", t: "num", l: "Parallel reviews", help: "How many reviews run at once." },
   { k: "ask_style", t: "select", o: ["dialog", "notification"], l: "Prompt style", help: "dialog: a window with buttons; notification: a notification + choice in the menu." },
   { k: "auto_max_per_poll", t: "num", l: "Auto limit per poll", help: "For on_new = auto: the most reviews a single poll starts." },
@@ -173,6 +173,7 @@ const SETTINGS = [
   { g: "Repository", k: "path", t: "text", l: "Clone directory", repoOnly: true, pick: "set", help: "Empty = auto-mapped from the scanned folders." },
   { g: "What to queue", k: "mode", t: "select", o: ["requested", "open"], l: "Mode",
     help: "requested: when my review is requested or I'm assigned; open: all open PR/MRs of the repo (except mine, ignored authors' and ones I already approved)." },
+  { g: "What to queue", k: "account", t: "text", l: "Account", help: "Which login reads this repo when its host has several accounts (Accounts tab), e.g. for “open” mode and counters. Empty = the host's first watched account. PR/MRs asked of you are always handled by the account that was asked." },
   { g: "What to queue", k: "include_drafts", t: "bool", l: "Include drafts" },
   { g: "What to queue", k: "ignore_authors", t: "list", l: "Ignore authors", help: "One per line: a login or re:<regex>, e.g. re:^project_\\d+_bot" },
   { g: "What to queue", k: "count_open", t: "bool", l: "Count all open", help: "The “N open” counter next to the repo in the menu." },
@@ -382,7 +383,7 @@ function renderNav() {
   const n = Object.keys(model.repos || {}).length;
   const unconf = clones.filter((c) => !c.configured).length;
   const items = [
-    ["global", "General"], ["defaults", "Repo defaults"], ["repos", "Repositories", n],
+    ["global", "General"], ["accounts", "Accounts", (model.github || []).length + (model.gitlab || []).length], ["defaults", "Repo defaults"], ["repos", "Repositories", n],
     ["scan", "Add from scan", unconf], ["json", "JSON"],
   ];
   const nav = $("#nav"); nav.replaceChildren();
@@ -397,7 +398,7 @@ function go(r) { route = r; render(); window.scrollTo(0, 0); }
 function render() {
   renderNav();
   const v = $("#view"); v.replaceChildren();
-  ({ global: viewGlobal, defaults: viewDefaults, repos: viewRepos, repo: viewRepo, scan: viewScan, json: viewJSON })[route.tab](v);
+  ({ global: viewGlobal, accounts: viewAccounts, defaults: viewDefaults, repos: viewRepos, repo: viewRepo, scan: viewScan, json: viewJSON })[route.tab](v);
 }
 
 function viewGlobal(v) {
@@ -410,6 +411,133 @@ function viewGlobal(v) {
     g.fields.push(f);
   }
   for (const g of groups) v.append(h("div", { class: "card" }, h("h3", {}, g.name), g.fields.map(globalRow)));
+}
+
+// ---- accounts ----------------------------------------------------------------
+
+let detected = null; // logins gh/glab know about (null = not fetched yet)
+let glabDir = "~/.config/juhas/glab";
+
+async function detectAccounts() {
+  try {
+    const r = await api("/api/accounts", { gitlab: model.gitlab || [] });
+    detected = r.accounts || []; glabDir = r.glab_dir || glabDir;
+  } catch (e) { detected = []; setStatus("accounts: " + e.message, "err"); }
+}
+
+const lc = (x) => String(x || "").toLowerCase();
+const watched = (e) => e.watch !== false;
+
+// One row per configured entry, then the logins gh/glab have that the
+// config does not use yet.
+function accountRows() {
+  const rows = [];
+  for (const platform of ["github", "gitlab"]) {
+    const list = model[platform] || [];
+    const det = (detected || []).filter((d) => d.platform === platform);
+    const used = new Set();
+    list.forEach((e, i) => {
+      let d = null;
+      if (e.user) d = det.find((x) => lc(x.host) === lc(e.host) && lc(x.user) === lc(e.user) && (x.config_dir || "") === (e.config_dir || ""));
+      else d = det.find((x) => lc(x.host) === lc(e.host) && (x.config_dir || "") === (e.config_dir || "") && x.active);
+      if (d) used.add(d);
+      rows.push({ platform, entry: e, index: i, det: d });
+    });
+    for (const d of det) if (!used.has(d)) rows.push({ platform, entry: null, det: d });
+  }
+  return rows;
+}
+
+function setWatch(row, on) {
+  const list = (model[row.platform] ||= []);
+  if (row.entry) {
+    if (on) delete row.entry.watch; else row.entry.watch = false;
+  } else if (on) {
+    const d = row.det;
+    // a host already watched through the CLI's default login: name that login
+    // explicitly, so the two entries never mean the same account
+    const plain = list.find((e) => lc(e.host) === lc(d.host) && !e.user && !e.config_dir);
+    if (row.platform === "github" && plain) {
+      const act = (detected || []).find((x) => x.platform === "github" && lc(x.host) === lc(d.host) && x.active);
+      if (act) plain.user = act.user;
+    }
+    const e = { host: d.host };
+    if (row.platform === "github" || d.config_dir) e.user = d.user;
+    if (d.config_dir) e.config_dir = d.config_dir;
+    list.push(e);
+  }
+  changed(); render();
+}
+
+function viewAccounts(v) {
+  if (detected === null) { detectAccounts().then(() => route.tab === "accounts" && render()); }
+  v.append(h("h2", {}, "Accounts"),
+    h("p", { class: "lead" }, "Where review requests come from. Juhas uses the logins of gh and glab — it never stores tokens. " +
+      "Tick “Watch” to check an account's review requests; unticked accounts stay listed (a repo can still use one through its “Account” setting)."));
+  const tbody = h("tbody");
+  const rows = accountRows();
+  for (const row of rows) {
+    const e = row.entry, d = row.det;
+    const host = e ? e.host : d.host;
+    const user = e?.user || (d ? d.user : "");
+    const on = e ? watched(e) : false;
+    const cb = h("input", { type: "checkbox", checked: on, title: "Check this account's review requests" });
+    cb.addEventListener("change", () => setWatch(row, cb.checked));
+    let status;
+    if (detected === null) status = h("span", { class: "muted" }, "checking…");
+    else if (!d) status = h("span", { class: "badge warn" }, row.platform === "github" ? "not logged in in gh" : "not logged in in glab");
+    else if (!d.logged_in) status = h("span", { class: "badge warn" }, "login broken — log in again");
+    else status = h("span", { class: "badge accent" }, "logged in");
+    const who = e && !e.user ? h("span", {}, user ? `${user} ` : "", h("span", { class: "muted" }, row.platform === "github" ? "(gh's active account)" : "(glab default login)"))
+      : h("span", {}, user || "—");
+    tbody.append(h("tr", {},
+      h("td", {}, cb),
+      h("td", {}, h("span", { class: "badge" }, row.platform === "github" ? "GitHub" : "GitLab")),
+      h("td", {}, h("div", { class: "mono" }, host), (e?.config_dir || d?.config_dir) ? h("div", { class: "muted mono" }, "glab config: " + (e?.config_dir || d?.config_dir)) : null),
+      h("td", {}, who),
+      h("td", {}, status, e ? null : h("span", { class: "muted" }, " · not in the config")),
+      h("td", {}, e ? h("button", { class: "small danger", onclick: () => {
+        if (!confirmInline(v, `Remove ${user ? user + "@" : ""}${host} from the config?`)) return;
+        model[row.platform].splice(row.index, 1); changed(); render();
+      } }, "Remove") : null)));
+  }
+  if (!rows.length) tbody.append(h("tr", {}, h("td", { colspan: 6, class: "muted" }, "No accounts — log in with gh / glab, or add a host below.")));
+
+  const plat = h("select", {}, h("option", { value: "github" }, "GitHub"), h("option", { value: "gitlab" }, "GitLab"));
+  const hostIn = h("input", { type: "text", placeholder: "host, e.g. gitlab.example.com", spellcheck: "false" });
+  const userIn = h("input", { type: "text", placeholder: "account (optional)", spellcheck: "false" });
+  const hint = h("div", { class: "help" });
+  const upd = () => {
+    const host = hostIn.value.trim() || "<host>", user = userIn.value.trim();
+    if (plat.value === "github") {
+      hint.replaceChildren("Log in once in a terminal: ", h("code", {}, `gh auth login --hostname ${host}`),
+        ". gh keeps several accounts per host; with an account name Juhas uses exactly that one, without it gh's active account.");
+    } else if (user) {
+      const dir = `${glabDir}/${host}-${user}`;
+      hint.replaceChildren("glab keeps one login per host, so a second GitLab account gets its own glab config. Log in once with: ",
+        h("code", {}, `GLAB_CONFIG_DIR=${dir} glab auth login --hostname ${host}`), ` — Juhas will use ${dir}.`);
+    } else {
+      hint.replaceChildren("Log in once with: ", h("code", {}, `glab auth login --hostname ${host}`), ". For a second account on the same host, fill in its name.");
+    }
+  };
+  [plat, hostIn, userIn].forEach((x) => x.addEventListener("input", upd)); upd();
+  const addBtn = h("button", { onclick: () => {
+    const host = hostIn.value.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "").toLowerCase();
+    if (!host) return;
+    const user = userIn.value.trim();
+    const e = { host };
+    if (user) e.user = user;
+    if (user && plat.value === "gitlab") e.config_dir = `${glabDir}/${host}-${user}`;
+    (model[plat.value] ||= []).push(e);
+    hostIn.value = userIn.value = ""; changed(); detected = null; render();
+  } }, "Add account");
+
+  v.append(
+    h("div", { class: "toolbar" }, h("button", { onclick: async () => { detected = null; render(); } }, "↻ Detect logins")),
+    h("div", { class: "card" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Watch"), h("th", {}, ""), h("th", {}, "Host"), h("th", {}, "Account"), h("th", {}, "Status"), h("th", {}, ""))), tbody)),
+    h("div", { class: "card" }, h("h3", {}, "Add an account"),
+      h("div", { class: "toolbar", style: "margin-top:8px" }, plat, hostIn, userIn, addBtn), hint),
+    h("p", { class: "help muted" }, "Comments you accept are published by the account the PR/MR was found with, and a review agent calling gh/glab acts as that account too."));
 }
 
 function viewDefaults(v) {

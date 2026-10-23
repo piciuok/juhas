@@ -18,25 +18,28 @@ type Context struct {
 // The diff is required; discussion and CI are best effort.
 func Fetch(ctx context.Context, it Item) (Context, error) {
 	var c Context
-	var err error
+	env, err := ItemAccount(it).Env(ctx) // as the account that found it
+	if err != nil {
+		return c, err
+	}
 	if it.Platform == GitHub {
-		out, _ := run(ctx, nil, "gh", "pr", "view", it.URL, "--comments")
+		out, _ := run(ctx, env, "gh", "pr", "view", it.URL, "--comments")
 		c.Discussion = string(out)
 		var d []byte
-		if d, err = run(ctx, nil, "gh", "pr", "diff", it.URL); err != nil {
+		if d, err = run(ctx, env, "gh", "pr", "diff", it.URL); err != nil {
 			return c, err
 		}
 		c.Diff = string(d)
-		ci, _ := run(ctx, nil, "gh", "pr", "checks", it.URL) // non-zero while checks are pending
+		ci, _ := run(ctx, env, "gh", "pr", "checks", it.URL) // non-zero while checks are pending
 		c.CI = string(ci)
 		return c, nil
 	}
 	host, project := SplitKey(it.Repo)
 	repo := fmt.Sprintf("https://%s/%s", host, project)
 	n := fmt.Sprint(it.Number)
-	out, _ := run(ctx, nil, "glab", "mr", "view", n, "-R", repo, "--comments")
+	out, _ := run(ctx, env, "glab", "mr", "view", n, "-R", repo, "--comments")
 	c.Discussion = string(out)
-	d, err := run(ctx, nil, "glab", "mr", "diff", n, "-R", repo, "--color=never")
+	d, err := run(ctx, env, "glab", "mr", "diff", n, "-R", repo, "--color=never")
 	if err != nil {
 		return c, err
 	}
@@ -47,13 +50,13 @@ func Fetch(ctx context.Context, it Item) (Context, error) {
 			WebURL string `json:"web_url"`
 		} `json:"head_pipeline"`
 	}
-	if b, err := run(ctx, nil, "glab", "api", "--hostname", host, fmt.Sprintf("projects/%s/merge_requests/%d", url.PathEscape(project), it.Number)); err == nil {
+	if b, err := run(ctx, env, "glab", "api", "--hostname", host, fmt.Sprintf("projects/%s/merge_requests/%d", url.PathEscape(project), it.Number)); err == nil {
 		if json.Unmarshal(b, &mr) == nil && mr.HeadPipeline != nil {
 			c.CI = fmt.Sprintf("pipeline: %s\n%s\n", mr.HeadPipeline.Status, mr.HeadPipeline.WebURL)
 		}
 	}
 	if c.CI == "" {
-		c.CI = "brak informacji o pipeline\n"
+		c.CI = "no pipeline information\n"
 	}
 	return c, nil
 }

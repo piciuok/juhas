@@ -31,11 +31,11 @@ type PostResult struct {
 }
 
 // runInput is run with a request body on stdin (gh/glab api --input -).
-func runInput(ctx context.Context, body []byte, name string, args ...string) ([]byte, error) {
+func runInput(ctx context.Context, env []string, body []byte, name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env = append(os.Environ(), noPrompt...)
+	cmd.Env = append(append(os.Environ(), noPrompt...), env...)
 	cmd.Stdin = bytes.NewReader(body)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -50,19 +50,32 @@ func runInput(ctx context.Context, body []byte, name string, args ...string) ([]
 }
 
 // Publish posts the summary (if not empty) and the inline comments.
+// It acts as the account that found the PR/MR.
 func Publish(ctx context.Context, it Item, summary string, comments []PostComment) (PostResult, []PostResult) {
-	if it.Platform == GitHub {
-		return publishGitHub(ctx, it, summary, comments)
+	env, err := ItemAccount(it).Env(ctx)
+	if err != nil {
+		sum := PostResult{ID: "summary", Err: err}
+		res := make([]PostResult, len(comments))
+		for i, c := range comments {
+			res[i] = PostResult{ID: c.ID, Err: err}
+		}
+		if strings.TrimSpace(summary) == "" {
+			sum = PostResult{}
+		}
+		return sum, res
 	}
-	return publishGitLab(ctx, it, summary, comments)
+	if it.Platform == GitHub {
+		return publishGitHub(ctx, env, it, summary, comments)
+	}
+	return publishGitLab(ctx, env, it, summary, comments)
 }
 
-func publishGitLab(ctx context.Context, it Item, summary string, comments []PostComment) (PostResult, []PostResult) {
+func publishGitLab(ctx context.Context, env []string, it Item, summary string, comments []PostComment) (PostResult, []PostResult) {
 	host, project := SplitKey(it.Repo)
 	base := fmt.Sprintf("projects/%s/merge_requests/%d", url.PathEscape(project), it.Number)
 	api := func(method, path string, body any) ([]byte, error) {
 		b, _ := json.Marshal(body)
-		return runInput(ctx, b, "glab", "api", "--hostname", host, "-X", method, "-H", "Content-Type: application/json", path, "--input", "-")
+		return runInput(ctx, env, b, "glab", "api", "--hostname", host, "-X", method, "-H", "Content-Type: application/json", path, "--input", "-")
 	}
 	noteURL := func(id int) string { return fmt.Sprintf("%s#note_%d", it.URL, id) }
 
@@ -88,7 +101,7 @@ func publishGitLab(ctx context.Context, it Item, summary string, comments []Post
 		} `json:"diff_refs"`
 	}
 	refsErr := error(nil)
-	if b, err := run(ctx, nil, "glab", "api", "--hostname", host, base); err != nil {
+	if b, err := run(ctx, env, "glab", "api", "--hostname", host, base); err != nil {
 		refsErr = err
 	} else if err := json.Unmarshal(b, &mr); err != nil {
 		refsErr = err
@@ -98,7 +111,7 @@ func publishGitLab(ctx context.Context, it Item, summary string, comments []Post
 		Old string `json:"old_path"`
 		New string `json:"new_path"`
 	}
-	if b, err := run(ctx, nil, "glab", "api", "--hostname", host, base+"/diffs?per_page=100"); err == nil && json.Unmarshal(b, &diffs) == nil {
+	if b, err := run(ctx, env, "glab", "api", "--hostname", host, base+"/diffs?per_page=100"); err == nil && json.Unmarshal(b, &diffs) == nil {
 		for _, d := range diffs {
 			oldPath[d.New] = d.Old
 		}
@@ -154,11 +167,11 @@ func publishGitLab(ctx context.Context, it Item, summary string, comments []Post
 	return sum, res
 }
 
-func publishGitHub(ctx context.Context, it Item, summary string, comments []PostComment) (PostResult, []PostResult) {
+func publishGitHub(ctx context.Context, env []string, it Item, summary string, comments []PostComment) (PostResult, []PostResult) {
 	host, repo := SplitKey(it.Repo)
 	api := func(method, path string, body any) ([]byte, error) {
 		b, _ := json.Marshal(body)
-		return runInput(ctx, b, "gh", "api", "--hostname", host, "-X", method, path, "--input", "-")
+		return runInput(ctx, env, b, "gh", "api", "--hostname", host, "-X", method, path, "--input", "-")
 	}
 	type ghComment struct {
 		Path string `json:"path"`

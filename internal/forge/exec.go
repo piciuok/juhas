@@ -36,10 +36,14 @@ func run(ctx context.Context, env []string, name string, args ...string) ([]byte
 
 // runCombined returns stdout+stderr regardless of exit status (for `auth status`).
 func runCombined(ctx context.Context, name string, args ...string) (string, error) {
+	return runCombinedEnv(ctx, nil, name, args...)
+}
+
+func runCombinedEnv(ctx context.Context, env []string, name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env = append(os.Environ(), noPrompt...)
+	cmd.Env = append(append(os.Environ(), noPrompt...), env...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

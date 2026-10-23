@@ -39,6 +39,7 @@ type Proposal struct {
 	Number    int               `json:"number"`
 	Title     string            `json:"title"`
 	Platform  string            `json:"platform"`
+	Account   string            `json:"account,omitempty"` // forge account the PR/MR was found with; publishing uses it
 	HeadSHA   string            `json:"head_sha"` // what the review saw
 	Agent     string            `json:"agent"`
 	Verdict   string            `json:"verdict"`

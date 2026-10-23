@@ -62,20 +62,39 @@ func cmdGuard(args []string) error {
 	return nil
 }
 
-// lookup fetches a PR/MR by URL through the configured forge.
+// lookup fetches a PR/MR by URL through the configured accounts: the
+// repo's "account" first, then the others of the host until one sees it.
 func lookup(ctx context.Context, cfg *config.Config, url string) (forge.Item, error) {
 	platform, repo, num, err := forge.ParseURL(url)
 	if err != nil {
 		return forge.Item{}, err
 	}
 	host, project := forge.SplitKey(repo)
-	var f forge.Forge
-	if platform == forge.GitHub {
-		f = forge.NewGitHub(host)
-	} else {
-		f = forge.NewGitLab(host)
+	key := repo
+	if k, ok := cfg.RepoKey(repo); ok {
+		key = k
 	}
-	it, err := f.Get(ctx, project, num)
+	s, _ := cfg.Effective(key)
+	var tries []forge.Account
+	for _, a := range cfg.Accounts() {
+		if a.Platform != platform || !strings.EqualFold(a.Host, host) {
+			continue
+		}
+		if s.Account != "" && strings.EqualFold(a.User, s.Account) {
+			tries = append([]forge.Account{a}, tries...)
+		} else {
+			tries = append(tries, a)
+		}
+	}
+	if len(tries) == 0 {
+		tries = []forge.Account{{Platform: platform, Host: host}}
+	}
+	var it forge.Item
+	for _, a := range tries {
+		if it, err = forge.New(a).Get(ctx, project, num); err == nil {
+			break
+		}
+	}
 	if err != nil {
 		return it, err
 	}

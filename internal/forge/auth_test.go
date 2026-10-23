@@ -1,11 +1,24 @@
 package forge
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 const ghStatus = `github.com
   ✓ Logged in to github.com account jan-dev (keyring)
   - Active account: true
   - Token scopes: 'gist', 'read:org', 'repo', 'workflow'
+`
+
+const ghTwo = `github.com
+  ✓ Logged in to github.com account jan-home (keyring)
+  - Active account: true
+  - Token scopes: 'gist', 'read:org', 'repo'
+
+  ✓ Logged in to github.com account jan-work (keyring)
+  - Active account: false
+  - Token scopes: 'repo'
 `
 
 const glabStatus = `gitlab.com
@@ -21,6 +34,11 @@ func TestParseAuthStatus(t *testing.T) {
 	gh := parseAuthStatus(ghStatus)
 	if len(gh) != 1 || !gh[0].LoggedIn || gh[0].Account != "jan-dev" {
 		t.Errorf("gh: %+v", gh)
+	}
+	two := parseAuthStatus(ghTwo)
+	if len(two) != 2 || two[0].Account != "jan-home" || !two[0].Active || two[1].Account != "jan-work" || two[1].Active ||
+		!two[1].LoggedIn || two[1].Host != "github.com" || strings.Contains(two[1].Detail, "read:org") {
+		t.Errorf("two gh accounts: %+v", two)
 	}
 	gl := parseAuthStatus(glabStatus)
 	if len(gl) != 2 {

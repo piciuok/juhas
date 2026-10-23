@@ -22,9 +22,7 @@ func AutoMap(ctx context.Context, cfg *config.Config) ([]Change, error) {
 	for _, d := range cfg.ScanDirs {
 		roots = append(roots, config.Expand(d))
 	}
-	for _, h := range append(append([]config.Host{}, cfg.GitHub...), cfg.GitLab...) {
-		hosts = append(hosts, h.Host)
-	}
+	hosts = cfg.HostNames()
 	if len(roots) == 0 || len(hosts) == 0 {
 		return nil, nil
 	}

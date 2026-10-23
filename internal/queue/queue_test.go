@@ -13,14 +13,23 @@ import (
 
 type fakeForge struct {
 	host      string
+	user      string
 	requested []forge.Item
 	open      map[string][]forge.Item
 	err       error
 }
 
-func (f *fakeForge) Host() string                       { return f.host }
-func (f *fakeForge) Platform() string                   { return forge.GitLab }
-func (f *fakeForge) Me(context.Context) (string, error) { return "me", nil }
+func (f *fakeForge) Host() string     { return f.host }
+func (f *fakeForge) Platform() string { return forge.GitLab }
+func (f *fakeForge) Account() forge.Account {
+	return forge.Account{Platform: forge.GitLab, Host: f.host}
+}
+func (f *fakeForge) Me(context.Context) (string, error) {
+	if f.user != "" {
+		return f.user, nil
+	}
+	return "me", nil
+}
 func (f *fakeForge) Requested(context.Context) ([]forge.Item, error) {
 	return f.requested, f.err
 }
@@ -144,5 +153,55 @@ func TestSplit(t *testing.T) {
 	}
 	if len(s.Entries) != 2 || s.Repos[0].Queued != 2 {
 		t.Error("Split modified the original snapshot")
+	}
+}
+
+func TestCollectAccounts(t *testing.T) {
+	cfg, err := config.Parse([]byte(`{
+  "github": [{"host": "gh.example", "user": "work"}, {"host": "gh.example", "user": "home"}, {"host": "gh.example", "user": "old", "watch": false}],
+  "scan_dirs": [],
+  "repos": {"gh.example/home/tool": {"mode": "open", "account": "home"}}
+}`), "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr := func(repo string, n int, acc string, mod func(*forge.Item)) forge.Item {
+		it := forge.Item{Platform: forge.GitHub, Repo: repo, Number: n, URL: repo + "/" + string(rune('a'+n)), Author: "dev", Account: acc}
+		if mod != nil {
+			mod(&it)
+		}
+		return it
+	}
+	work := &fakeForge{host: "gh.example", user: "work", requested: []forge.Item{
+		pr("gh.example/acme/app", 1, "gh.example@work", func(i *forge.Item) { i.Requested = true }),
+		pr("gh.example/home/tool", 2, "gh.example@work", func(i *forge.Item) { i.Author = "home" }), // seen from work, written by home
+	}}
+	home := &fakeForge{host: "gh.example", user: "home", requested: []forge.Item{
+		pr("gh.example/acme/app", 1, "gh.example@home", nil), // the same PR, not asked of home
+	}, open: map[string][]forge.Item{"home/tool": {pr("gh.example/home/tool", 3, "gh.example@home", nil), pr("gh.example/home/tool", 2, "gh.example@home", func(i *forge.Item) { i.Author = "home" })}}}
+	old := &fakeForge{host: "gh.example", user: "old", err: errors.New("must not be asked")}
+	c := &Collector{Cfg: cfg, Now: func() time.Time { return now },
+		Forges:    map[string]forge.Forge{"gh.example@work": work, "gh.example@home": home, "gh.example@old": old},
+		Order:     []string{"gh.example@work", "gh.example@home", "gh.example@old"},
+		Unwatched: map[string]bool{"gh.example@old": true}}
+	snap := c.Collect(context.Background())
+	if len(snap.Errors) != 0 {
+		t.Fatalf("errors: %v", snap.Errors)
+	}
+	got := map[string]string{}
+	for _, e := range snap.Entries {
+		got[e.Repo+e.Ref()] = e.Account
+	}
+	if got["gh.example/acme/app#1"] != "gh.example@work" {
+		t.Errorf("PR asked of work must act as work: %v", got)
+	}
+	if got["gh.example/home/tool#3"] != "gh.example@home" {
+		t.Errorf("open repo read by its account: %v", got)
+	}
+	if _, ok := got["gh.example/home/tool#2"]; ok {
+		t.Errorf("a PR by another of my accounts is mine: %v", got)
+	}
+	if f, _ := c.ForRepo("gh.example", ""); f != work {
+		t.Error("ForRepo without account: the first watched one")
 	}
 }

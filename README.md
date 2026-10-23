@@ -17,6 +17,7 @@ comments; you accept, edit or reject each one, and Juhas publishes the accepted 
 - **New PR/MR** → "Run AI review?" with a choice of **Claude / Codex**, *Later* or *Skip*.
 - **Human in the loop** — a blinking, sparking **❓** next to the icon reminds you of proposals awaiting your decision.
 - **Live run log**, briefs as Markdown files, and a browser **Panel** that stays open while you click.
+- **Several accounts** — work and personal GitHub logins (and GitLab ones) side by side, each acting as itself.
 - **Settings UI** over a plain JSON file: global defaults, per-repo overrides, folder picker, repo auto-mapping.
 - **Diagnostics** for every CLI it needs (versions, logins), with copy-paste fixes.
 - **Self-updating** from GitHub releases, with checksum verification.
@@ -26,6 +27,7 @@ comments; you accept, edit or reject each one, and Juhas publishes the accepted 
 - [Install](#install)
 - [Requirements](#requirements)
 - [Where it gets things from](#where-it-gets-things-from)
+- [Accounts](#accounts)
 - [Configuration](#configuration)
 - [How a review works](#how-a-review-works)
 - [Updates](#updates)
@@ -99,6 +101,32 @@ are added to `repos` and moved ones get their new path. Settings has a folder pi
 
 **Urgent** (`urgent`): assigned to you or requesting your review, and carrying one of `labels`, waiting
 longer than `older_than`, or targeting one of `target_branches` (e.g. `release/*`).
+
+## Accounts
+
+Juhas never stores tokens: it uses the logins of `gh` and `glab`. *Settings → Accounts* lists every login
+they have, with a **Watch** checkbox for whose review requests to check.
+
+```jsonc
+"github": [
+  { "host": "github.com", "user": "me-at-work" },
+  { "host": "github.com", "user": "me-at-home" },
+  { "host": "github.example.com", "watch": false }           // kept, but not checked
+],
+"gitlab": [
+  { "host": "gitlab.example.com" },                           // glab's login
+  { "host": "gitlab.example.com", "user": "bot-reviewer",     // a second account on the same host
+    "config_dir": "~/.config/juhas/glab/gitlab.example.com-bot-reviewer" }
+]
+```
+
+- **GitHub:** `gh` keeps several accounts per host (`gh auth login` once for each). With `user` Juhas uses
+  exactly that account, whichever one is active in `gh`; without it, `gh`'s active account.
+- **GitLab:** `glab` keeps one login per host, so a second account gets its own glab config:
+  `GLAB_CONFIG_DIR=<config_dir> glab auth login --hostname <host>` (Settings shows the exact command).
+- A PR/MR is **handled by the account that was asked**: fetching the diff, the review agent's own gh/glab calls
+  and publishing your accepted comments. A PR/MR written by another of your accounts counts as yours.
+- For repos in `open` mode, `"account": "<user>"` in the repo settings picks the login that reads it.
 
 ## Configuration
 

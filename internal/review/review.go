@@ -355,7 +355,7 @@ func Run(ctx context.Context, cfg *config.Config, s config.Settings, it forge.It
 	}
 	body = CleanBrief(body)
 	if prop != nil {
-		prop.URL, prop.Repo, prop.Number, prop.Title, prop.Platform = it.URL, it.Repo, it.Number, it.Title, it.Platform
+		prop.URL, prop.Repo, prop.Number, prop.Title, prop.Platform, prop.Account = it.URL, it.Repo, it.Number, it.Title, it.Platform, it.Account
 		prop.HeadSHA, prop.Agent, prop.CreatedAt = it.HeadSHA, agent, time.Now()
 		if err := SaveProposal(ProposalPath(logPath), prop); err != nil {
 			fmt.Fprintf(log, "%s ! saving proposal: %v\n", stamp(), err)
@@ -377,7 +377,7 @@ func runClaude(ctx context.Context, a config.Agent, s config.Settings, it forge.
 	cmd := exec.CommandContext(ctx, a.Bin, Args(a, s.Review, m, GuardCommand())...)
 	cmd.Dir = dir
 	cmd.Stdin = strings.NewReader(Prompt(it, m, s))
-	cmd.Env = append(os.Environ(), "JUHAS=1")
+	cmd.Env = append(append(os.Environ(), "JUHAS=1"), forge.Env(ctx, it)...) // gh/glab as the account that found it
 	setProcessGroup(cmd)
 	cmd.Cancel = func() error { return killGroup(cmd) }
 	cmd.WaitDelay = 5 * time.Second

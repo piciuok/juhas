@@ -129,9 +129,7 @@ func mapClones(ctx context.Context, c *config.Config, apply bool) (int, error) {
 		return 0, errors.New("no scan_dirs — pass --dir ~/Projects")
 	}
 	var hosts []string
-	for _, h := range append(append([]config.Host{}, c.GitHub...), c.GitLab...) {
-		hosts = append(hosts, h.Host)
-	}
+	hosts = c.HostNames()
 	all := scan.Clones(ctx, roots)
 	clones := scan.OnHosts(all, hosts)
 	fmt.Printf("Clones in %s: %d (on hosts %s: %d)\n\n", strings.Join(c.ScanDirs, ", "), len(all), strings.Join(hosts, ", "), len(clones))

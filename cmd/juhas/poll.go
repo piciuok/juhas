@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"juhas/internal/config"
+	"juhas/internal/forge"
 	"juhas/internal/queue"
 )
 
@@ -17,6 +18,7 @@ func loadConfig() (*config.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w\nCreate it with: juhas config init", err)
 	}
+	forge.SetAccounts(c.Accounts())
 	return c, nil
 }
 

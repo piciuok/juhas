@@ -124,10 +124,7 @@ func current(r *http.Request, p *review.Proposal) (forge.Item, error) {
 		return forge.Item{}, err
 	}
 	host, project := forge.SplitKey(repo)
-	var f forge.Forge = forge.NewGitLab(host)
-	if platform == forge.GitHub {
-		f = forge.NewGitHub(host)
-	}
+	f := forge.New(forge.AccountFor(platform, host, p.Account))
 	it, err := f.Get(r.Context(), project, num)
 	it.Repo = repo
 	return it, err
@@ -339,6 +336,7 @@ func start(path string, onSave func(), persistent bool) (*Server, string, error)
 	mux.HandleFunc("POST /api/save", s.api(s.save))
 	mux.HandleFunc("POST /api/scan", s.api(s.scan))
 	mux.HandleFunc("GET /api/ls", s.api(s.ls))
+	mux.HandleFunc("POST /api/accounts", s.api(s.accounts))
 	mux.HandleFunc("POST /api/close", s.api(func(w http.ResponseWriter, r *http.Request) (any, error) {
 		if s.Persistent {
 			return map[string]bool{"ok": true}, nil // the tray owns this server
@@ -511,9 +509,7 @@ func clones(ctx context.Context, cfg *config.Config) []cloneInfo {
 	for _, d := range cfg.ScanDirs {
 		roots = append(roots, config.Expand(d))
 	}
-	for _, h := range append(append([]config.Host{}, cfg.GitHub...), cfg.GitLab...) {
-		hosts = append(hosts, h.Host)
-	}
+	hosts = cfg.HostNames()
 	var out []cloneInfo
 	seen := map[string]bool{}
 	for _, c := range scan.OnHosts(scan.Clones(ctx, roots), hosts) {

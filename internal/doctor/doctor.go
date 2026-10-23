@@ -147,27 +147,59 @@ func github(ctx context.Context, r *Report, cfg *config.Config) {
 		return
 	}
 	for _, h := range cfg.GitHub {
+		a := h.Account(forge.GitHub)
 		var found *forge.HostAuth
 		for i := range st {
-			if strings.EqualFold(st[i].Host, h.Host) {
+			if !strings.EqualFold(st[i].Host, h.Host) {
+				continue
+			}
+			if h.User == "" && (st[i].Active || found == nil) || h.User != "" && strings.EqualFold(st[i].Account, h.User) {
 				found = &st[i]
 			}
 		}
 		login := "gh auth login --hostname " + h.Host
+		who := a.Label()
+		if h.User == "" {
+			who += " (active gh account)"
+		}
+		if !h.Watched() {
+			who += " — not watched"
+		}
 		if found == nil || !found.LoggedIn {
-			r.add(Fail, "GitHub", h.Host+": not logged in", login)
+			if h.User != "" {
+				login += "  (log in as " + h.User + "; gh keeps the other accounts)"
+			}
+			r.add(Fail, "GitHub", who+": not logged in", login)
 			continue
 		}
-		r.add(OK, "GitHub", fmt.Sprintf("%s: logged in as %s", h.Host, found.Account), "")
+		r.add(OK, "GitHub", fmt.Sprintf("%s: logged in as %s", who, found.Account), "")
 		for _, scope := range []string{"repo", "read:org"} {
 			if !strings.Contains(found.Detail, "'"+scope+"'") && strings.Contains(found.Detail, "Token scopes") {
 				hint := "gh auth refresh --hostname " + h.Host + " --scopes " + scope
-				msg := h.Host + ": token lacks scope " + scope
+				if h.User != "" {
+					hint = "gh auth switch --hostname " + h.Host + " --user " + h.User + " && " + hint
+				}
+				msg := a.Label() + ": token lacks scope " + scope
 				if scope == "read:org" {
 					msg += " (team review requests are not visible)"
 				}
 				r.add(Warn, "GitHub", msg, hint)
 			}
+		}
+	}
+	// accounts gh knows that Juhas does not use
+	for _, s := range st {
+		if !s.LoggedIn || s.Account == "" {
+			continue
+		}
+		used := false
+		for _, h := range cfg.GitHub {
+			if strings.EqualFold(h.Host, s.Host) && (h.User == "" && s.Active || strings.EqualFold(h.User, s.Account)) {
+				used = true
+			}
+		}
+		if !used {
+			r.add(OK, "GitHub", fmt.Sprintf("%s@%s: logged in in gh, not used (Settings → Accounts)", s.Account, s.Host), "")
 		}
 	}
 }
@@ -177,12 +209,25 @@ func gitlab(ctx context.Context, r *Report, cfg *config.Config) {
 		return
 	}
 	for _, h := range cfg.GitLab {
-		me, err := forge.NewGitLab(h.Host).Me(ctx)
+		a := h.Account(forge.GitLab)
+		login := "glab auth login --hostname " + h.Host
+		if a.ConfigDir != "" {
+			login = "GLAB_CONFIG_DIR=" + config.Contract(a.ConfigDir) + " " + login
+		}
+		me, err := forge.NewGitLab(a).Me(ctx)
 		if err != nil {
-			r.add(Fail, "GitLab", h.Host+": "+err.Error(), "glab auth login --hostname "+h.Host)
+			r.add(Fail, "GitLab", a.Label()+": "+err.Error(), login)
 			continue
 		}
-		r.add(OK, "GitLab", fmt.Sprintf("%s: logged in as %s", h.Host, me), "")
+		if h.User != "" && !strings.EqualFold(me, h.User) {
+			r.add(Warn, "GitLab", fmt.Sprintf("%s: glab is logged in as %s", a.Label(), me), login)
+			continue
+		}
+		msg := fmt.Sprintf("%s: logged in as %s", h.Host, me)
+		if !h.Watched() {
+			msg += " — not watched"
+		}
+		r.add(OK, "GitLab", msg, "")
 	}
 }
 
@@ -314,7 +359,9 @@ func repos(ctx context.Context, r *Report, cfg *config.Config, opt Options) {
 	}
 	gl := map[string]*forge.GitLabForge{}
 	for _, h := range cfg.GitLab {
-		gl[strings.ToLower(h.Host)] = forge.NewGitLab(h.Host)
+		if _, ok := gl[strings.ToLower(h.Host)]; !ok {
+			gl[strings.ToLower(h.Host)] = forge.NewGitLab(h.Account(forge.GitLab))
+		}
 	}
 	for _, key := range cfg.RepoKeys() {
 		s, err := cfg.Effective(key)
