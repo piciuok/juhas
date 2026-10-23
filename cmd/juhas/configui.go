@@ -22,6 +22,7 @@ func configUI(args []string) error {
 	fs := flag.NewFlagSet("config ui", flag.ExitOnError)
 	noOpen := fs.Bool("no-open", false, "only print the address, do not open the browser")
 	fs.Parse(args)
+	_, _ = loadConfig() // registers the accounts for the review page; the page itself reports a broken config
 	s, url, err := configui.Start(config.DefaultPath(), nil)
 	if err != nil {
 		return err

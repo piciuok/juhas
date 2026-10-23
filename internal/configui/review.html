@@ -43,6 +43,19 @@ textarea:disabled { border-style: dashed; color: var(--muted); }
 .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
 .note a { color: var(--accent); }
 .note.err { color: var(--err); }
+.view { margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.view .tabs { display: flex; gap: 6px; align-items: center; padding: 5px 8px; background: var(--chip); border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.view .tabs button { font-size: 12px; padding: 2px 9px; }
+.view .tabs button.on { border-color: var(--accent); color: var(--accent); }
+.code { position: relative; max-height: 420px; overflow: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--input); }
+.code table { border-collapse: collapse; min-width: 100%; }
+.code td { padding: 0 8px; white-space: pre; vertical-align: top; }
+.code td.n { color: var(--muted); text-align: right; user-select: none; width: 1%; border-right: 1px solid var(--line); }
+.code tr.add td.t { background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.code tr.del td.t { background: color-mix(in srgb, var(--err) 14%, transparent); }
+.code tr.hunk td { color: var(--muted); background: var(--chip); }
+.code tr.hit td { background: color-mix(in srgb, var(--warn) 30%, transparent) !important; }
+.code .msg { padding: 10px; color: var(--muted); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 10px 20px; display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
 footer .count { color: var(--muted); font-size: 13px; margin-right: auto; }
 </style>
@@ -114,6 +127,62 @@ function counts() {
   $("#publish").textContent = acc ? `Publish accepted (${acc})` : "Publish accepted";
 }
 
+// File preview: the diff of the file a comment is about, or the whole file at
+// the reviewed commit, with the commented line marked — without leaving the page.
+const files = {}, views = {}; // file -> Promise<FileView>; comment id -> "diff" | "file"
+const fileView = (f) => files[f] || (files[f] = api(`/api/review/file?job=${JOB}&file=${encodeURIComponent(f)}`).catch((e) => { delete files[f]; throw e; }));
+
+function rows(lines, line) {
+  let hit = null;
+  const tb = h("tbody");
+  for (const l of lines) {
+    const tr = h("tr", { class: l.cls || "" }, h("td", { class: "n" }, l.old ?? ""), h("td", { class: "n" }, l.nu ?? ""), h("td", { class: "t" }, l.text || " "));
+    if (line > 0 && l.nu === line && !hit) { tr.classList.add("hit"); hit = tr; }
+    tb.append(tr);
+  }
+  return [h("table", {}, tb), hit];
+}
+
+function diffLines(patch) {
+  const out = []; let o = 0, n = 0;
+  for (const t of patch.replace(/\n$/, "").split("\n")) {
+    const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(t);
+    if (m) { o = +m[1]; n = +m[2]; out.push({ cls: "hunk", text: t }); continue; }
+    if (t.startsWith("\\")) continue; // "\ No newline at end of file"
+    if (t.startsWith("+")) out.push({ cls: "add", nu: n++, text: t });
+    else if (t.startsWith("-")) out.push({ cls: "del", old: o++, text: t });
+    else out.push({ old: o++, nu: n++, text: t });
+  }
+  return out;
+}
+
+function preview(c) {
+  const mode = views[c.id];
+  const box = h("div", { class: "code" }, h("div", { class: "msg" }, "Loading…"));
+  const tab = (m, label) => h("button", { class: m === mode ? "on" : "", onclick: () => { views[c.id] = m; render(); } }, label);
+  const el = h("div", { class: "view" }, h("div", { class: "tabs" }, tab("diff", "Diff"), tab("file", "Whole file"),
+    h("span", { class: "spacer" }), P.head_sha ? "at " + String(P.head_sha).slice(0, 10) : ""), box);
+  fileView(c.file).then((v) => {
+    const msg = (t) => box.replaceChildren(h("div", { class: "msg" }, t));
+    let lines;
+    if (mode === "diff") {
+      if (!v.patch) return msg(v.deleted ? "The file is deleted." : "This file has no diff in the PR/MR (unchanged, or too large to show).");
+      lines = diffLines(v.patch);
+    } else {
+      if (v.error) return msg("Couldn't load the file: " + v.error);
+      if (v.deleted) return msg("The file is deleted in this PR/MR.");
+      if (v.binary) return msg("Binary file.");
+      lines = v.content.replace(/\n$/, "").split("\n").map((t, i) => ({ nu: i + 1, text: t }));
+    }
+    const [table, hit] = rows(lines, c.line);
+    box.replaceChildren(table);
+    if (v.truncated && mode === "file") box.append(h("div", { class: "msg" }, "…truncated (file over 1 MB)."));
+    if (hit) requestAnimationFrame(() => { box.scrollTop = hit.offsetTop - box.clientHeight / 3; });
+    else if (c.line > 0) box.prepend(h("div", { class: "msg" }, `Line ${c.line} is not ${mode === "diff" ? "in the diff" : "in the file"}.`));
+  }).catch((e) => box.replaceChildren(h("div", { class: "msg" }, "Couldn't load: " + e.message)));
+  return el;
+}
+
 function card(c) {
   const posted = c.status === "posted";
   const ta = h("textarea", { disabled: posted || c.status === "rejected" });
@@ -127,8 +196,10 @@ function card(c) {
       c.severity ? h("span", { class: "sev " + c.severity }, c.severity) : null,
       h("span", { class: "sev" }, LABEL[c.status] || c.status),
       h("span", { class: "spacer" }),
+      c.file ? h("button", { title: "Show the file next to the comment", class: views[c.id] ? "on" : "", onclick: () => { views[c.id] = views[c.id] ? null : "diff"; render(); } }, views[c.id] ? "Hide file" : "📄 File") : null,
       posted ? null : h("button", { class: "ok" + (c.status === "accepted" ? " on" : ""), onclick: () => set("accepted") }, "✓ Accept"),
       posted ? null : h("button", { class: "no" + (c.status === "rejected" ? " on" : ""), onclick: () => set("rejected") }, "✕ Reject")),
+    c.file && views[c.id] ? preview(c) : null,
     ta,
     posted ? h("div", { class: "note" }, "published: ", h("a", { href: c.posted, target: "_blank", rel: "noopener" }, "view in PR/MR"), c.note ? " · " + c.note : "") : null,
     c.status === "failed" ? h("div", { class: "note err" }, c.error || "error") : null,

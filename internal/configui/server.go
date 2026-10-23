@@ -149,6 +149,33 @@ func (s *Server) reviewGet(w http.ResponseWriter, r *http.Request) (any, error) 
 	return resp, nil
 }
 
+// reviewFile shows one file a comment is about: its diff and its content at
+// the reviewed commit. Only files the proposal mentions can be asked for.
+func (s *Server) reviewFile(w http.ResponseWriter, r *http.Request) (any, error) {
+	path, err := proposalFile(r.URL.Query().Get("job"))
+	if err != nil {
+		return nil, err
+	}
+	p, err := review.LoadProposal(path)
+	if err != nil {
+		return nil, err
+	}
+	file := r.URL.Query().Get("file")
+	known := false
+	for _, c := range p.Comments {
+		known = known || (file != "" && c.File == file)
+	}
+	if !known {
+		return nil, errors.New("this file is not part of the proposal")
+	}
+	platform, repo, num, err := forge.ParseURL(p.URL)
+	if err != nil {
+		return nil, err
+	}
+	it := forge.Item{Platform: platform, Repo: repo, Number: num, URL: p.URL, HeadSHA: p.HeadSHA, Account: p.Account}
+	return forge.File(r.Context(), it, file, p.HeadSHA)
+}
+
 type commentEdit struct {
 	ID     string `json:"id"`
 	Body   string `json:"body"`
@@ -321,6 +348,7 @@ func start(path string, onSave func(), persistent bool) (*Server, string, error)
 	mux.HandleFunc("GET /api/doctor", s.api(s.doctorGet))
 	mux.HandleFunc("POST /api/doctor/run", s.api(s.doctorRun))
 	mux.HandleFunc("GET /api/review", s.api(s.reviewGet))
+	mux.HandleFunc("GET /api/review/file", s.api(s.reviewFile))
 	mux.HandleFunc("POST /api/review/save", s.api(s.reviewSave))
 	mux.HandleFunc("POST /api/review/publish", s.api(s.reviewPublish))
 	mux.HandleFunc("GET /api/panel", s.api(func(w http.ResponseWriter, r *http.Request) (any, error) {

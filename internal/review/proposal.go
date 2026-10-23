@@ -40,7 +40,7 @@ type Proposal struct {
 	Title     string            `json:"title"`
 	Platform  string            `json:"platform"`
 	Account   string            `json:"account,omitempty"` // forge account the PR/MR was found with; publishing uses it
-	HeadSHA   string            `json:"head_sha"` // what the review saw
+	HeadSHA   string            `json:"head_sha"`          // what the review saw
 	Agent     string            `json:"agent"`
 	Verdict   string            `json:"verdict"`
 	Summary   ProposedComment   `json:"summary"` // the general comment (File empty)
