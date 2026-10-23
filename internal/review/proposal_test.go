@@ -67,3 +67,21 @@ func TestResolved(t *testing.T) {
 		t.Error("no proposal = nothing to decide")
 	}
 }
+
+func TestLockProposal(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "x.review.json")
+	unlock, err := LockProposal(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LockProposal(path, false); err != ErrBusy {
+		t.Errorf("second publish: %v, want ErrBusy", err)
+	}
+	unlock()
+	u2, err := LockProposal(path, false)
+	if err != nil {
+		t.Errorf("after unlock: %v", err)
+	} else {
+		u2()
+	}
+}

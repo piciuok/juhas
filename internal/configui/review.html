@@ -99,7 +99,7 @@ async function api(path, body) {
   return j;
 }
 
-let P = null, stale = false, confirmForce = 0;
+let P = null, stale = false, confirmForce = 0, publishing = false;
 const all = () => (P.summary && P.summary.body ? [P.summary] : []).concat(P.comments || []);
 const LABEL = { pending: "awaiting decision", accepted: "accepted", rejected: "rejected", posted: "published", failed: "publish failed" };
 
@@ -123,6 +123,7 @@ function counts() {
   const pend = a.filter((c) => c.status === "pending").length;
   const posted = a.filter((c) => c.status === "posted").length;
   $("#count").textContent = `${acc} accepted · ${pend} awaiting decision · ${posted} published`;
+  if (publishing) return; // the button stays "Publishing…" until the server answers
   $("#publish").disabled = acc === 0;
   $("#publish").textContent = acc ? `Publish accepted (${acc})` : "Publish accepted";
 }
@@ -233,16 +234,22 @@ $("#rejectAll").addEventListener("click", () => { all().forEach((c) => { if (c.s
 $("#publish").addEventListener("click", async () => {
   const force = stale && Date.now() - confirmForce < 5000;
   if (stale && !force) { confirmForce = Date.now(); $("#saved").textContent = "There are new commits — click again within 5 s to publish anyway."; return; }
+  if (publishing) return;
   clearTimeout(saveTimer);
+  publishing = true;
   $("#publish").disabled = true; $("#publish").textContent = "Publishing…";
   try {
     await api("/api/review/save", { job: JOB, comments: all().map((c) => ({ id: c.id, body: c.body, status: c.status })) });
     const r = await api("/api/review/publish", { job: JOB, force });
+    publishing = false;
     P = r.proposal; render();
     const failed = all().filter((c) => c.status === "failed").length;
     $("#banners").prepend(h("div", { class: "banner " + (failed ? "err" : "ok") }, failed ? `Published with errors (${failed}) — check the marked comments.` : "Published the accepted comments."));
   } catch (e) {
-    $("#banners").prepend(h("div", { class: "banner err" }, e.message));
+    publishing = false;
+    if (e.message.startsWith("stale:")) stale = true; // pushed after the page loaded: the next click can force
+    $("#banners").prepend(h("div", { class: "banner err" }, e.message + (stale && !force ? " — click Publish again within 5 s to publish anyway." : "")));
+    if (stale && !force) confirmForce = Date.now();
     counts();
   }
 });

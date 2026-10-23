@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -122,6 +123,31 @@ func (p *Proposal) Markdown() string {
 // ProposalPath is next to the run log: jobs/<id>.review.json.
 func ProposalPath(logPath string) string {
 	return strings.TrimSuffix(logPath, ".log") + ".review.json"
+}
+
+// ErrBusy means another publish of the same proposal is in progress.
+var ErrBusy = errors.New("this proposal is being published right now")
+
+// LockProposal serialises edits and publishing of one proposal, also across
+// processes (the tray and \`juhas config ui\` both serve the page). With wait
+// unset it fails with ErrBusy instead of waiting. Call the returned func to unlock.
+func LockProposal(path string, wait bool) (func(), error) {
+	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	how := syscall.LOCK_EX
+	if !wait {
+		how |= syscall.LOCK_NB
+	}
+	if err := syscall.Flock(int(f.Fd()), how); err != nil {
+		f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, ErrBusy
+		}
+		return nil, err
+	}
+	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
 }
 
 func SaveProposal(path string, p *Proposal) error {

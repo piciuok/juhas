@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -92,31 +94,7 @@ func publishGitLab(ctx context.Context, env []string, it Item, summary string, c
 		sum.Err = err
 	}
 
-	// positions need the MR's diff refs and, for renamed files, the old path
-	var mr struct {
-		DiffRefs struct {
-			Base  string `json:"base_sha"`
-			Head  string `json:"head_sha"`
-			Start string `json:"start_sha"`
-		} `json:"diff_refs"`
-	}
-	refsErr := error(nil)
-	if b, err := run(ctx, env, "glab", "api", "--hostname", host, base); err != nil {
-		refsErr = err
-	} else if err := json.Unmarshal(b, &mr); err != nil {
-		refsErr = err
-	}
-	oldPath := map[string]string{}
-	var diffs []struct {
-		Old string `json:"old_path"`
-		New string `json:"new_path"`
-	}
-	if b, err := run(ctx, env, "glab", "api", "--hostname", host, base+"/diffs?per_page=100"); err == nil && json.Unmarshal(b, &diffs) == nil {
-		for _, d := range diffs {
-			oldPath[d.New] = d.Old
-		}
-	}
-
+	refs, diffs, refsErr := glDiffs(ctx, env, host, base, it.HeadSHA)
 	var res []PostResult
 	for _, c := range comments {
 		r := PostResult{ID: c.ID}
@@ -135,36 +113,166 @@ func publishGitLab(ctx context.Context, env []string, it Item, summary string, c
 				r.Err = err
 			}
 		}
-		_, inDiff := oldPath[c.File]
-		if refsErr != nil || c.Line <= 0 || !inDiff {
+		d, inDiff := diffs[c.File]
+		oldLine, inHunk := 0, false
+		if inDiff {
+			oldLine, inHunk = hunkLine(d.Diff, c.Line)
+		}
+		if refsErr != nil || c.Line <= 0 || !inDiff || (d.Diff != "" && !inHunk) {
 			general("outside the diff — posted as a general comment")
 			res = append(res, r)
 			continue
 		}
-		old := oldPath[c.File]
-		pos := map[string]any{"position_type": "text", "base_sha": mr.DiffRefs.Base, "start_sha": mr.DiffRefs.Start, "head_sha": mr.DiffRefs.Head,
-			"old_path": old, "new_path": c.File, "new_line": c.Line}
+		pos := map[string]any{"position_type": "text", "base_sha": refs.Base, "start_sha": refs.Start, "head_sha": refs.Head,
+			"old_path": d.Old, "new_path": c.File, "new_line": c.Line}
+		if oldLine > 0 {
+			pos["old_line"] = oldLine // an unchanged line needs both sides
+		}
 		out, err := api("POST", base+"/discussions", map[string]any{"body": c.Body, "position": pos})
-		var d struct {
+		var dn struct {
 			Notes []struct {
 				ID       int             `json:"id"`
 				Position json.RawMessage `json:"position"`
 			} `json:"notes"`
 		}
 		switch {
-		case err != nil:
+		case err != nil && rejected(err):
 			general("line outside the changes — posted as a general comment") // e.g. line_code can't be blank
-		case json.Unmarshal(out, &d) != nil || len(d.Notes) == 0:
+		case err != nil:
+			r.Err = err // a timeout or 5xx may still have created it: do not post twice
+		case json.Unmarshal(out, &dn) != nil || len(dn.Notes) == 0:
 			r.Err = fmt.Errorf("unexpected response from GitLab")
 		default:
-			r.URL = noteURL(d.Notes[0].ID)
-			if p := string(d.Notes[0].Position); p == "" || p == "null" {
+			r.URL = noteURL(dn.Notes[0].ID)
+			if p := string(dn.Notes[0].Position); p == "" || p == "null" {
 				r.Note = "GitLab did not attach it to the line — posted as a general comment"
 			}
 		}
 		res = append(res, r)
 	}
 	return sum, res
+}
+
+type glRefs struct {
+	Base, Start, Head string
+}
+
+type glFileDiff struct {
+	Old  string // old path (differs for renames)
+	Diff string // unified hunks ("" = unknown, e.g. too large)
+}
+
+// glDiffs returns the diff refs and per-file diffs of the MR version whose
+// head is sha (the reviewed commit), so lines are anchored to what the review
+// saw even after new pushes; without a match it uses the current version.
+func glDiffs(ctx context.Context, env []string, host, base, sha string) (glRefs, map[string]glFileDiff, error) {
+	var refs glRefs
+	files := map[string]glFileDiff{}
+	type diff struct {
+		Old  string `json:"old_path"`
+		New  string `json:"new_path"`
+		Diff string `json:"diff"`
+	}
+	var versions []struct {
+		ID    int    `json:"id"`
+		Head  string `json:"head_commit_sha"`
+		Base  string `json:"base_commit_sha"`
+		Start string `json:"start_commit_sha"`
+	}
+	if sha != "" {
+		if b, err := run(ctx, env, "glab", "api", "--hostname", host, base+"/versions"); err == nil && json.Unmarshal(b, &versions) == nil {
+			for _, v := range versions {
+				if v.Head != sha {
+					continue
+				}
+				var full struct {
+					Diffs []diff `json:"diffs"`
+				}
+				b, err := run(ctx, env, "glab", "api", "--hostname", host, fmt.Sprintf("%s/versions/%d", base, v.ID))
+				if err != nil || json.Unmarshal(b, &full) != nil {
+					break
+				}
+				for _, d := range full.Diffs {
+					files[d.New] = glFileDiff{Old: d.Old, Diff: d.Diff}
+				}
+				return glRefs{Base: v.Base, Start: v.Start, Head: v.Head}, files, nil
+			}
+		}
+	}
+	var mr struct {
+		DiffRefs struct {
+			Base  string `json:"base_sha"`
+			Head  string `json:"head_sha"`
+			Start string `json:"start_sha"`
+		} `json:"diff_refs"`
+	}
+	b, err := run(ctx, env, "glab", "api", "--hostname", host, base)
+	if err == nil {
+		err = json.Unmarshal(b, &mr)
+	}
+	if err != nil {
+		return refs, files, err
+	}
+	refs = glRefs{Base: mr.DiffRefs.Base, Start: mr.DiffRefs.Start, Head: mr.DiffRefs.Head}
+	for page := 1; page <= 30; page++ {
+		var diffs []diff
+		b, err := run(ctx, env, "glab", "api", "--hostname", host, fmt.Sprintf("%s/diffs?per_page=100&page=%d", base, page))
+		if err != nil || json.Unmarshal(b, &diffs) != nil {
+			break // GitLab < 15.7: files stay unknown and comments go as general notes
+		}
+		for _, d := range diffs {
+			files[d.New] = glFileDiff{Old: d.Old, Diff: d.Diff}
+		}
+		if len(diffs) < 100 {
+			break
+		}
+	}
+	return refs, files, nil
+}
+
+var hunkHeader = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
+
+// hunkLine finds a new-side line in a unified diff: ok reports whether it is
+// inside a hunk, and oldLine is its old-side number when the line is
+// unchanged context (0 for an added line).
+func hunkLine(diff string, line int) (oldLine int, ok bool) {
+	o, n := 0, 0
+	for _, t := range strings.Split(diff, "\n") {
+		if m := hunkHeader.FindStringSubmatch(t); m != nil {
+			o, _ = strconv.Atoi(m[1])
+			n, _ = strconv.Atoi(m[2])
+			continue
+		}
+		if n == 0 || t == "" || strings.HasPrefix(t, "\\") {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(t, "+"):
+			if n == line {
+				return 0, true
+			}
+			n++
+		case strings.HasPrefix(t, "-"):
+			o++
+		default:
+			if n == line {
+				return o, true
+			}
+			o++
+			n++
+		}
+	}
+	return 0, false
+}
+
+var httpStatus = regexp.MustCompile(`\(HTTP (\d{3})\)`)
+
+// rejected reports whether gh/glab got a 400/422 — the forge refused the
+// request (e.g. a line outside the diff), so nothing was created and a
+// fallback is safe. Timeouts and 5xx are not: the request may have landed.
+func rejected(err error) bool {
+	m := httpStatus.FindStringSubmatch(err.Error())
+	return m != nil && (m[1] == "422" || m[1] == "400")
 }
 
 func publishGitHub(ctx context.Context, env []string, it Item, summary string, comments []PostComment) (PostResult, []PostResult) {
@@ -198,7 +306,11 @@ func publishGitHub(ctx context.Context, env []string, it Item, summary string, c
 	var rv struct {
 		HTMLURL string `json:"html_url"`
 	}
-	if err == nil && json.Unmarshal(out, &rv) == nil {
+	if err == nil {
+		_ = json.Unmarshal(out, &rv) // created either way; the URL is a nicety
+		if rv.HTMLURL == "" {
+			rv.HTMLURL = it.URL
+		}
 		sum := PostResult{ID: "summary", URL: rv.HTMLURL}
 		for _, c := range comments {
 			r := PostResult{ID: c.ID, URL: rv.HTMLURL}
@@ -206,6 +318,14 @@ func publishGitHub(ctx context.Context, env []string, it Item, summary string, c
 				r.Note = "no line — included in the review body"
 			}
 			res = append(res, r)
+		}
+		return sum, res
+	}
+	if !rejected(err) {
+		// a timeout or 5xx may have created the review: report, never repost
+		sum := PostResult{ID: "summary", Err: err}
+		for _, c := range comments {
+			res = append(res, PostResult{ID: c.ID, Err: err})
 		}
 		return sum, res
 	}
@@ -220,8 +340,17 @@ func publishGitHub(ctx context.Context, env []string, it Item, summary string, c
 			var pc struct {
 				HTMLURL string `json:"html_url"`
 			}
-			if err == nil && json.Unmarshal(out, &pc) == nil {
+			if err == nil {
+				_ = json.Unmarshal(out, &pc)
 				r.URL = pc.HTMLURL
+				if r.URL == "" {
+					r.URL = it.URL
+				}
+				res = append(res, r)
+				continue
+			}
+			if !rejected(err) {
+				r.Err = err
 				res = append(res, r)
 				continue
 			}
@@ -240,14 +369,14 @@ func publishGitHub(ctx context.Context, env []string, it Item, summary string, c
 		if err == nil && json.Unmarshal(out, &ic) == nil {
 			sum.URL = ic.HTMLURL
 			for i := range res {
-				if res[i].URL == "" {
+				if res[i].URL == "" && res[i].Err == nil {
 					res[i].URL = ic.HTMLURL
 				}
 			}
 		} else {
 			sum.Err = err
 			for i := range res {
-				if res[i].URL == "" {
+				if res[i].URL == "" && res[i].Err == nil {
 					res[i].Err = err
 				}
 			}

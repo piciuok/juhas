@@ -28,7 +28,7 @@ case "$*" in
   *"/notes"*) echo '{"id": 501}';;
   *"/discussions"*)
     case "$in" in
-      *'"new_line":99'*) echo "line_code can't be blank" >&2; exit 1;;
+      *'"new_line":99'*) echo "glab: 400 Bad request - line_code can't be blank (HTTP 400)" >&2; exit 1;;
       *) echo '{"notes":[{"id": 601, "position": {"new_line": 12}}]}';;
     esac;;
   *"/diffs"*) echo '[{"old_path":"old/a.ts","new_path":"apps/a.ts"}]';;
@@ -65,10 +65,10 @@ esac`)
 func TestPublishGitHubFallsBackPerComment(t *testing.T) {
 	log := fakeCLI(t, "gh", `
 case "$*" in
-  *"/reviews"*) echo '{"message":"Unprocessable"}'; exit 1;;
+  *"/reviews"*) echo '{"message":"Unprocessable"}'; echo 'gh: Unprocessable Entity (HTTP 422)' >&2; exit 1;;
   *"/pulls/5/comments"*)
     case "$in" in
-      *'"line":1000'*) exit 1;;
+      *'"line":1000'*) echo 'gh: Validation Failed (HTTP 422)' >&2; exit 1;;
       *) echo '{"html_url":"https://github.com/o/r/pull/5#discussion_r1"}';;
     esac;;
   *"/issues/5/comments"*) echo '{"html_url":"https://github.com/o/r/pull/5#issuecomment-9"}';;
@@ -90,5 +90,61 @@ esac`)
 	b, _ := os.ReadFile(log)
 	if !strings.Contains(string(b), `"commit_id":"abc"`) || !strings.Contains(string(b), "bad line") {
 		t.Errorf("calls:\n%s", b)
+	}
+}
+
+func TestPublishGitHubTimeoutDoesNotRepost(t *testing.T) {
+	log := fakeCLI(t, "gh", `
+case "$*" in
+  *"/reviews"*) echo 'gh: Bad Gateway (HTTP 502)' >&2; exit 1;;
+  *) echo '{"html_url":"x"}';;
+esac`)
+	it := Item{Platform: GitHub, Repo: "github.com/o/r", Number: 5, HeadSHA: "abc"}
+	sum, res := Publish(context.Background(), it, "S", []PostComment{{ID: "c1", File: "a.go", Line: 10, Body: "ok"}})
+	if sum.Err == nil || res[0].Err == nil {
+		t.Errorf("a 502 must be reported, not retried: %+v %+v", sum, res)
+	}
+	b, _ := os.ReadFile(log)
+	if strings.Count(string(b), "\n") != 1 {
+		t.Errorf("only the review POST may run:\n%s", b)
+	}
+}
+
+func TestPublishGitLabReviewedVersion(t *testing.T) {
+	log := fakeCLI(t, "glab", `
+case "$*" in
+  *"/versions/2"*) printf '%s' '{"diffs":[{"old_path":"a.ts","new_path":"a.ts","diff":"@@ -10,4 +10,4 @@\n ctx\n+added\n ctx2\n-gone\n ctx3\n"}]}';;
+  *"/versions"*) echo '[{"id":3,"head_commit_sha":"new"},{"id":2,"head_commit_sha":"rev","base_commit_sha":"B","start_commit_sha":"S"}]';;
+  *"/discussions"*) case "$in" in *'"new_line":13'*) echo 'glab: 500 (HTTP 500)' >&2; exit 1;; *) echo '{"notes":[{"id": 7, "position": {}}]}';; esac;;
+  *"/notes"*) echo '{"id": 8}';;
+esac`)
+	it := Item{Platform: GitLab, Repo: "gl.example/t/a", Number: 1, URL: "u", HeadSHA: "rev"}
+	_, res := Publish(context.Background(), it, "", []PostComment{
+		{ID: "c1", File: "a.ts", Line: 12, Body: "on context"},
+		{ID: "c2", File: "a.ts", Line: 11, Body: "on added"},
+		{ID: "c3", File: "a.ts", Line: 13, Body: "server error"},
+	})
+	b, _ := os.ReadFile(log)
+	calls := string(b)
+	if !strings.Contains(calls, `"head_sha":"rev"`) || !strings.Contains(calls, `"base_sha":"B"`) {
+		t.Errorf("not anchored to the reviewed version:\n%s", calls)
+	}
+	if !strings.Contains(calls, `"new_line":12,"old_line":11`) && !strings.Contains(calls, `"old_line":11`) {
+		t.Errorf("context line needs old_line 11:\n%s", calls)
+	}
+	if res[0].Err != nil || res[1].Err != nil || res[2].Err == nil || strings.Contains(calls, "/notes") {
+		t.Errorf("results %+v; a 500 must not fall back to a note:\n%s", res, calls)
+	}
+}
+
+func TestHunkLine(t *testing.T) {
+	d := "@@ -10,4 +10,4 @@ f\n ctx\n+added\n ctx2\n-gone\n ctx3\n"
+	for _, c := range []struct {
+		line, old int
+		ok        bool
+	}{{10, 10, true}, {11, 0, true}, {12, 11, true}, {13, 13, true}, {14, 0, false}, {9, 0, false}} {
+		if o, ok := hunkLine(d, c.line); o != c.old || ok != c.ok {
+			t.Errorf("line %d: got %d %v", c.line, o, ok)
+		}
 	}
 }

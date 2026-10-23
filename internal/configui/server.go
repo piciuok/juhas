@@ -177,9 +177,9 @@ func (s *Server) reviewFile(w http.ResponseWriter, r *http.Request) (any, error)
 }
 
 type commentEdit struct {
-	ID     string `json:"id"`
-	Body   string `json:"body"`
-	Status string `json:"status"`
+	ID     string  `json:"id"`
+	Body   *string `json:"body"` // nil = unchanged; "" is a real (empty) edit
+	Status string  `json:"status"`
 }
 
 // reviewSave stores edits and accept/reject decisions; posted ones are final.
@@ -195,6 +195,11 @@ func (s *Server) reviewSave(w http.ResponseWriter, r *http.Request) (any, error)
 	if err != nil {
 		return nil, err
 	}
+	unlock, err := review.LockProposal(path, true) // waits out a publish, then applies on top of it
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	p, err := review.LoadProposal(path)
 	if err != nil {
 		return nil, err
@@ -208,8 +213,8 @@ func (s *Server) reviewSave(w http.ResponseWriter, r *http.Request) (any, error)
 		case review.CommentPending, review.CommentAccepted, review.CommentRejected:
 			c.Status = e.Status
 		}
-		if b := strings.TrimSpace(e.Body); b != "" {
-			c.Body = b
+		if e.Body != nil {
+			c.Body = strings.TrimSpace(*e.Body)
 		}
 	}
 	if err := review.SaveProposal(path, p); err != nil {
@@ -234,6 +239,11 @@ func (s *Server) reviewPublish(w http.ResponseWriter, r *http.Request) (any, err
 	if err != nil {
 		return nil, err
 	}
+	unlock, err := review.LockProposal(path, false) // a second click or tab must not post again
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	p, err := review.LoadProposal(path)
 	if err != nil {
 		return nil, err
@@ -245,15 +255,21 @@ func (s *Server) reviewPublish(w http.ResponseWriter, r *http.Request) (any, err
 	if it.HeadSHA != p.HeadSHA && p.HeadSHA != "" && !req.Force {
 		return nil, errors.New("stale: new commits since the review — lines may have shifted")
 	}
-	if p.Platform == forge.GitHub && p.HeadSHA != "" {
-		it.HeadSHA = p.HeadSHA // anchor GitHub comments to the commit that was reviewed
+	if p.HeadSHA != "" {
+		it.HeadSHA = p.HeadSHA // anchor comments to the commit that was reviewed
 	}
 	summary := ""
 	if p.Summary.Status == review.CommentAccepted {
 		summary = p.Summary.Body
 	}
+	if p.Summary.Status == review.CommentAccepted && summary == "" {
+		return nil, errors.New("the accepted general comment is empty")
+	}
 	var comments []forge.PostComment
 	for _, c := range p.Comments {
+		if c.Status == review.CommentAccepted && c.Body == "" {
+			return nil, fmt.Errorf("the accepted comment on %s is empty", c.File)
+		}
 		if c.Status == review.CommentAccepted {
 			comments = append(comments, forge.PostComment{ID: c.ID, File: c.File, Line: c.Line, Body: c.Body})
 		}
