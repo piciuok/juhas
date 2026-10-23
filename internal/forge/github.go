@@ -93,6 +93,10 @@ type ghSearch struct {
 		Search *struct {
 			IssueCount int     `json:"issueCount"`
 			Nodes      []*ghPR `json:"nodes"`
+			PageInfo   struct {
+				HasNext bool   `json:"hasNextPage"`
+				End     string `json:"endCursor"`
+			} `json:"pageInfo"`
 		} `json:"search"`
 	} `json:"data"`
 	Errors []struct {
@@ -100,9 +104,41 @@ type ghSearch struct {
 	} `json:"errors"`
 }
 
-func (g *GitHubForge) search(ctx context.Context, q string, first int) (*ghSearch, error) {
-	query := fmt.Sprintf(`query($q: String!) { viewer { login } search(query: $q, type: ISSUE, first: %d) { issueCount nodes { ... on PullRequest { %s } } } }`, first, ghPRFields)
-	out, err := runAs(ctx, g.acc, "gh", "api", "graphql", "--hostname", g.host, "-f", "q="+q, "-f", "query="+query)
+// searchAll pages through a search (up to maxPages × 100 results).
+func (g *GitHubForge) searchAll(ctx context.Context, q string) (*ghSearch, error) {
+	var all *ghSearch
+	after := ""
+	for page := 0; page < maxPages; page++ {
+		res, err := g.search(ctx, q, 100, after)
+		if err != nil && page > 0 {
+			res, err = g.search(ctx, q, 100, after) // big result pages get the odd 502
+		}
+		if err != nil && page > 0 {
+			return all, nil // keep the pages we have rather than drop them all
+		}
+		if err != nil {
+			return nil, err
+		}
+		if all == nil {
+			all = res
+		} else {
+			all.Data.Search.Nodes = append(all.Data.Search.Nodes, res.Data.Search.Nodes...)
+		}
+		if !res.Data.Search.PageInfo.HasNext || res.Data.Search.PageInfo.End == "" {
+			break
+		}
+		after = res.Data.Search.PageInfo.End
+	}
+	return all, nil
+}
+
+func (g *GitHubForge) search(ctx context.Context, q string, first int, after string) (*ghSearch, error) {
+	query := fmt.Sprintf(`query($q: String!, $after: String) { viewer { login } search(query: $q, type: ISSUE, first: %d, after: $after) { issueCount pageInfo { hasNextPage endCursor } nodes { ... on PullRequest { %s } } } }`, first, ghPRFields)
+	args := []string{"api", "graphql", "--hostname", g.host, "-f", "q=" + q, "-f", "query=" + query}
+	if after != "" {
+		args = append(args, "-f", "after="+after)
+	}
+	out, err := runAs(ctx, g.acc, "gh", args...)
 	var res ghSearch
 	if jerr := json.Unmarshal(out, &res); jerr != nil || res.Data.Search == nil {
 		// no usable data; gh exits non-zero on GraphQL errors, too
@@ -159,7 +195,7 @@ func (g *GitHubForge) Requested(ctx context.Context) ([]Item, error) {
 		"is:pr is:open archived:false review-requested:@me",
 		"is:pr is:open archived:false assignee:@me -author:@me",
 	} {
-		res, err := g.search(ctx, q, 100)
+		res, err := g.searchAll(ctx, q)
 		if err != nil {
 			return nil, err
 		}
@@ -184,7 +220,7 @@ func (g *GitHubForge) Requested(ctx context.Context) ([]Item, error) {
 }
 
 func (g *GitHubForge) Open(ctx context.Context, project string) ([]Item, error) {
-	res, err := g.search(ctx, "is:pr is:open repo:"+project, 100)
+	res, err := g.searchAll(ctx, "is:pr is:open repo:"+project)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +234,7 @@ func (g *GitHubForge) Open(ctx context.Context, project string) ([]Item, error) 
 }
 
 func (g *GitHubForge) CountOpen(ctx context.Context, project string) (int, error) {
-	res, err := g.search(ctx, "is:pr is:open repo:"+project, 1)
+	res, err := g.search(ctx, "is:pr is:open repo:"+project, 1, "")
 	if err != nil {
 		return 0, err
 	}

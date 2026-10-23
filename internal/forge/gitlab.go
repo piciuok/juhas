@@ -63,6 +63,25 @@ func (g *GitLabForge) api(ctx context.Context, path string, v any) error {
 	return nil
 }
 
+// maxPages bounds list pagination (100 per page).
+const maxPages = 10
+
+// mrs lists merge requests from a paginated endpoint (path has a query).
+func (g *GitLabForge) mrs(ctx context.Context, path string) ([]glMR, error) {
+	var all []glMR
+	for page := 1; page <= maxPages; page++ {
+		var mrs []glMR
+		if err := g.api(ctx, fmt.Sprintf("%s&per_page=100&page=%d", path, page), &mrs); err != nil {
+			return all, err
+		}
+		all = append(all, mrs...)
+		if len(mrs) < 100 {
+			break
+		}
+	}
+	return all, nil
+}
+
 func (g *GitLabForge) Me(ctx context.Context) (string, error) {
 	g.mu.Lock()
 	me := g.me
@@ -92,9 +111,8 @@ func (g *GitLabForge) Requested(ctx context.Context) ([]Item, error) {
 	var items []Item
 	seen := map[string]int{}
 	for _, filter := range []string{"reviewer_username", "assignee_username"} {
-		var mrs []glMR
-		q := fmt.Sprintf("merge_requests?%s=%s&state=opened&scope=all&per_page=100", filter, url.QueryEscape(me))
-		if err := g.api(ctx, q, &mrs); err != nil {
+		mrs, err := g.mrs(ctx, fmt.Sprintf("merge_requests?%s=%s&state=opened&scope=all", filter, url.QueryEscape(me)))
+		if err != nil {
 			return nil, err
 		}
 		for _, mr := range mrs {
@@ -125,8 +143,8 @@ func (g *GitLabForge) Open(ctx context.Context, project string) ([]Item, error) 
 	if err != nil {
 		return nil, err
 	}
-	var mrs []glMR
-	if err := g.api(ctx, "projects/"+url.PathEscape(project)+"/merge_requests?state=opened&per_page=100", &mrs); err != nil {
+	mrs, err := g.mrs(ctx, "projects/"+url.PathEscape(project)+"/merge_requests?state=opened")
+	if err != nil {
 		return nil, err
 	}
 	items := make([]Item, 0, len(mrs))
@@ -234,11 +252,8 @@ func (g *GitLabForge) fillApprovals(ctx context.Context, items []Item, me string
 }
 
 func (g *GitLabForge) CountOpen(ctx context.Context, project string) (int, error) {
-	var mrs []struct {
-		IID int `json:"iid"`
-	}
-	// per_page=100 is enough for a counter; anything above shows as 100.
-	if err := g.api(ctx, "projects/"+url.PathEscape(project)+"/merge_requests?state=opened&per_page=100", &mrs); err != nil {
+	mrs, err := g.mrs(ctx, "projects/"+url.PathEscape(project)+"/merge_requests?state=opened")
+	if err != nil {
 		return 0, err
 	}
 	return len(mrs), nil
@@ -286,8 +301,8 @@ type RawMR struct {
 
 // OpenRaw lists open MRs of a project without fetching approvals.
 func (g *GitLabForge) OpenRaw(ctx context.Context, project string) ([]RawMR, error) {
-	var mrs []glMR
-	if err := g.api(ctx, "projects/"+url.PathEscape(project)+"/merge_requests?state=opened&per_page=100", &mrs); err != nil {
+	mrs, err := g.mrs(ctx, "projects/"+url.PathEscape(project)+"/merge_requests?state=opened")
+	if err != nil {
 		return nil, err
 	}
 	out := make([]RawMR, len(mrs))
