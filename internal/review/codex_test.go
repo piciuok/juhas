@@ -10,7 +10,7 @@ import (
 )
 
 func TestCodexArgs(t *testing.T) {
-	a := CodexArgs(config.Agent{Bin: "codex", Model: "gpt-x", Effort: "high", ExtraArgs: []string{"--foo"}}, "/wt", "/ctx/last.md")
+	a := CodexArgs(config.Agent{Bin: "codex", Model: "gpt-x", Effort: "high", ExtraArgs: []string{"--foo"}}, config.GuardReadOnly, "/wt", "/ctx/last.md")
 	got := strings.Join(a, " ")
 	for _, want := range []string{"exec --sandbox read-only --json", "--cd /wt", "--output-last-message /ctx/last.md", "--model gpt-x", `model_reasoning_effort="high"`, "--foo -"} {
 		if !strings.Contains(got, want) {

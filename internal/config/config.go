@@ -225,7 +225,16 @@ type Review struct {
 	Effort          string   `json:"effort"` // overrides the agent's effort for this repo
 	AllowedTools    []string `json:"allowed_tools"`
 	DisallowedTools []string `json:"disallowed_tools"`
+	// Guard: read-only (default) checks every Bash command and MCP tool call
+	// and blocks writes; off lets the agent do anything its tools allow.
+	Guard      string   `json:"guard"`
+	GuardAllow []string `json:"guard_allow"` // exceptions: "mcp__jira__addComment", "mcp__x__*", "Bash(git push*)"
 }
+
+const (
+	GuardReadOnly = "read-only"
+	GuardOff      = "off"
+)
 
 type Urgent struct {
 	Labels         []string `json:"labels"`
@@ -259,7 +268,9 @@ const builtinSettings = `{
     "model": "",
     "effort": "",
     "allowed_tools": [],
-    "disallowed_tools": []
+    "disallowed_tools": [],
+    "guard": "read-only",
+    "guard_allow": []
   },
   "urgent": { "labels": ["urgent", "priority::high", "hotfix"], "older_than": "", "target_branches": [] },
   "flash": true,
@@ -562,6 +573,11 @@ func (s Settings) validate() error {
 	case "builtin", "claude-code-review", "none":
 	default:
 		return fmt.Errorf("review.fallback %q: want builtin|claude-code-review|none", s.Review.Fallback)
+	}
+	switch s.Review.Guard {
+	case GuardReadOnly, GuardOff:
+	default:
+		return fmt.Errorf("review.guard %q: want read-only|off", s.Review.Guard)
 	}
 	if s.Agent != AgentClaude && s.Agent != AgentCodex {
 		return fmt.Errorf("agent %q: want claude|codex", s.Agent)

@@ -163,10 +163,21 @@ Full example: [`config.example.json`](config.example.json).
    that skill is used. Otherwise `review.fallback`: `builtin` (the built-in prompt), `claude-code-review`
    (`/code-review`) or `none`.
 2. **Claude Code** runs as `claude -p --permission-mode dontAsk` in the repo with a `PreToolUse` hook
-   (`juhas guard`). The hook parses every shell command (chains, pipes, `$(…)`, `sh -c`) and blocks writes:
-   comments, approvals and merges via gh/glab, non-GET `api` calls, GraphQL mutations,
-   `git push/commit/reset`, branch switches outside the review worktree, uploads with curl, package
-   publishing. Edit and Write are disabled.
+   (`juhas guard`) on Bash and MCP tools. With `review.guard: "read-only"` (the default) it checks:
+   - **Bash commands**, including chains, pipes, `$(…)`, `sh -c`, wrappers (`xargs`, `env`, `nice`, `find -exec`…),
+     git aliases and scripts written to temp dirs. It blocks:
+     - comments, approvals and merges via gh/glab, and non-GET `api` calls or GraphQL mutations;
+     - `git push`, `commit`, `send-pack` and other history writes, plus branch switches outside the review worktree;
+     - uploads with curl or wget, package publishing, and token printing;
+     - file writes in your clone (writes to `/tmp` and review worktrees are fine);
+     - command names built at run time, which it cannot check.
+   - **MCP tools.** Reading tools (`get…`, `list…`, `search…`, `fetch…`) work, so a review can pull in the Jira
+     ticket or the docs. Tools that create, edit, comment, transition or delete are blocked, and so is anything
+     whose name does not say it only reads.
+
+   Exceptions go in `review.guard_allow` (an MCP tool, a `prefix*`, or `Bash(git push*)`).
+   `review.guard: "off"` turns all of this off: the agent may then do whatever its tools allow, while Juhas still
+   publishes only the comments you accept. Edit and Write are disabled unless the guard is off.
 3. **Codex**: Juhas itself fetches the description with the discussion, the diff and the CI status, and checks out
    a detached worktree at the head SHA. `codex exec --sandbox read-only` then works **without network and
    without write access**, enforced by the OS sandbox rather than a deny-list. A repo skill is passed in as the
@@ -180,10 +191,14 @@ Full example: [`config.example.json`](config.example.json).
 
 Worth knowing:
 
-- Claude's protection is a deny-list in a hook, not a sandbox. It catches the usual write paths, but a repo
-  skill does get Bash (that is how its worktree, `pnpm install` or prechecks work).
+- Claude's protection is a hook that checks commands, not a sandbox. It closes the ways to write to a forge,
+  to git, to tickets and to your clone, but a repo skill does get Bash and the network for reads: that is how its
+  worktree, `pnpm install`, prechecks or ticket lookups work. A determined prompt injection could still read
+  data and send it out with a GET request. Running the PR's own code (`pnpm install` scripts, tests) is as safe as
+  running that PR locally.
 - PR titles, descriptions and comments are written by other people. The prompt treats them as data, but they
-  are still third-party input (prompt injection) — which is why Codex has no network and Claude has no WebFetch.
+  are still third-party input (prompt injection). That is why Codex has no network, and Claude's MCP and Bash
+  writes are blocked unless you allow them.
 - You are sending code to Anthropic or OpenAI. Make sure that is allowed where you work.
 
 ## Updates
@@ -223,8 +238,9 @@ State and logs live in `~/.local/state/juhas/` (`poll.log`, `state.json`, `jobs/
 ## Q&A
 
 **Does the AI post anything to my PR/MR?**
-No. Agents run read-only (a guard hook and disabled edit tools for Claude, an OS sandbox without network for Codex).
-Only you publish, from the proposal page, and only the comments you accepted.
+No. Agents run read-only by default: Claude has a guard hook and its edit tools are disabled, and Codex runs in an
+OS sandbox without network. Only you publish, from the proposal page, and only the comments you accepted.
+If you trust your agent more, `review.guard: "off"` (globally or per repo) lifts the restrictions.
 
 **Which agent should I pick?**
 Both work. Claude Code can run a repo's review skill with its own tooling; Codex has the stricter sandbox.

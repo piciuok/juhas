@@ -136,8 +136,14 @@ Output in markdown, concise and specific:
 }
 
 // CodexArgs builds `codex exec` arguments (prompt on stdin via "-").
-func CodexArgs(a config.Agent, workdir, lastMsg string) []string {
-	args := []string{"exec", "--sandbox", "read-only", "--json", "--color", "never", "--skip-git-repo-check",
+// CodexArgs: codex's own sandbox enforces review.guard (read-only, or full
+// access when the guard is off).
+func CodexArgs(a config.Agent, guard, workdir, lastMsg string) []string {
+	sandbox := "read-only"
+	if guard == config.GuardOff {
+		sandbox = "danger-full-access"
+	}
+	args := []string{"exec", "--sandbox", sandbox, "--json", "--color", "never", "--skip-git-repo-check",
 		"--cd", workdir, "--output-last-message", lastMsg}
 	if a.Model != "" {
 		args = append(args, "--model", a.Model)
@@ -162,7 +168,7 @@ func runCodex(ctx context.Context, cfg *config.Config, s config.Settings, it for
 	}
 	a := cfg.AgentConfig(config.AgentCodex, s)
 	last := filepath.Join(ws.CtxDir, "last-message.md")
-	cmd := exec.CommandContext(ctx, a.Bin, CodexArgs(a, workdir, last)...)
+	cmd := exec.CommandContext(ctx, a.Bin, CodexArgs(a, s.Review.Guard, workdir, last)...)
 	cmd.Dir = workdir
 	cmd.Stdin = strings.NewReader(CodexPrompt(it, m, s, ws, dir))
 	cmd.Env = append(os.Environ(), "JUHAS=1", "NO_COLOR=1")

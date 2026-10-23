@@ -215,7 +215,8 @@ func Args(a config.Agent, r config.Review, m Method, guardCmd string) []string {
 	if a.Effort != "" {
 		args = append(args, "--effort", a.Effort)
 	}
-	if guardCmd != "" {
+	off := r.Guard == config.GuardOff
+	if guardCmd != "" && !off {
 		args = append(args, "--settings", HookSettings(guardCmd))
 	}
 	allowed := builtinTools
@@ -224,6 +225,11 @@ func Args(a config.Agent, r config.Review, m Method, guardCmd string) []string {
 	}
 	allowed = append(append([]string{}, allowed...), r.AllowedTools...)
 	denied := append(append([]string{}, alwaysDenied...), r.DisallowedTools...)
+	if off {
+		// review.guard off: the agent may do whatever its tools allow
+		allowed = append(allowed, "Bash", "Edit", "Write")
+		denied = append([]string{}, r.DisallowedTools...)
+	}
 	// Variadic flags last-but-one: each list is closed by the next flag.
 	args = append(args, "--allowedTools")
 	args = append(args, allowed...)
@@ -238,8 +244,8 @@ func HookSettings(guardCmd string) string {
 	s := map[string]any{
 		"hooks": map[string]any{
 			"PreToolUse": []any{map[string]any{
-				"matcher": "Bash",
-				"hooks":   []any{map[string]any{"type": "command", "command": guardCmd, "timeout": 10}},
+				"matcher": "Bash|mcp__.*",
+				"hooks":   []any{map[string]any{"type": "command", "command": guardCmd, "timeout": 30}},
 			}},
 		},
 	}
@@ -247,8 +253,10 @@ func HookSettings(guardCmd string) string {
 	return string(b)
 }
 
-// GuardCommand is how claude invokes this binary's guard subcommand.
-func GuardCommand() string {
+// GuardCommand is how claude invokes this binary's guard subcommand, with
+// the repo's guard_allow exceptions. It fails closed: Claude Code treats only
+// exit 2 as "deny", so a missing binary or a crash must turn into exit 2 too.
+func GuardCommand(allow []string) string {
 	exe, err := os.Executable()
 	if err != nil {
 		return ""
@@ -256,7 +264,11 @@ func GuardCommand() string {
 	if p, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = p
 	}
-	return shellQuote(exe) + " guard"
+	cmd := shellQuote(exe) + " guard"
+	if len(allow) > 0 {
+		cmd += " --allow " + shellQuote(strings.Join(allow, "\n"))
+	}
+	return cmd + " || exit 2"
 }
 
 // Result of one review.
@@ -377,7 +389,11 @@ func Run(ctx context.Context, cfg *config.Config, s config.Settings, it forge.It
 }
 
 func runClaude(ctx context.Context, a config.Agent, s config.Settings, it forge.Item, m Method, dir, logPath string, log io.Writer, started func(int)) (string, error) {
-	cmd := exec.CommandContext(ctx, a.Bin, Args(a, s.Review, m, GuardCommand())...)
+	guardCmd := GuardCommand(s.Review.GuardAllow)
+	if guardCmd == "" && s.Review.Guard != config.GuardOff {
+		return "", errors.New("cannot locate the juhas binary for the read-only guard — not starting a review without it")
+	}
+	cmd := exec.CommandContext(ctx, a.Bin, Args(a, s.Review, m, guardCmd)...)
 	cmd.Dir = dir
 	cmd.Stdin = strings.NewReader(Prompt(it, m, s))
 	cmd.Env = append(append(os.Environ(), "JUHAS=1"), forge.Env(ctx, it)...) // gh/glab as the account that found it

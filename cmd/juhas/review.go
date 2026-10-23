@@ -42,6 +42,11 @@ func init() {
 
 // cmdGuard is the PreToolUse hook: exit 2 with the reason on stderr denies.
 func cmdGuard(args []string) error {
+	var allow []string
+	if len(args) > 1 && args[0] == "--allow" {
+		allow = strings.Split(args[1], "\n") // review.guard_allow
+		args = args[2:]
+	}
 	if len(args) > 0 && args[0] != "-" {
 		// manual check: juhas guard 'glab mr note 1 -m x'
 		if r := review.Guard(strings.Join(args, " ")); r != "" {
@@ -51,7 +56,7 @@ func cmdGuard(args []string) error {
 		fmt.Println("ALLOW")
 		return nil
 	}
-	reason, err := review.RunHook(os.Stdin)
+	reason, err := review.RunHook(os.Stdin, allow)
 	if err != nil {
 		// unreadable payload: fail closed
 		fmt.Fprintln(os.Stderr, "juhas guard: unreadable hook input:", err)
