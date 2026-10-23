@@ -15,12 +15,17 @@ comments; you accept, edit or reject each one, and Juhas publishes the accepted 
 - **Urgent items** assigned to you turn the icon into a **sparking lightning bolt** until you acknowledge them.
   A new urgent one also gets you a **kick**: an on-screen discharge (macOS) and a loud notification.
 - **New PR/MR** → "Run AI review?" with a choice of **Claude / Codex**, *Later* or *Skip*.
-- **Human in the loop** — a blinking, sparking **❓** next to the icon reminds you of proposals awaiting your decision.
+- **Human in the loop** — a blinking, sparking **❓** next to the icon reminds you of proposals awaiting your decision;
+  each comment can show its file's diff or the whole file, with the line highlighted, right on the proposal page.
+- **Read-only guard** — reviews may read anything (gh/glab, Jira or docs through MCP) but not push, comment or edit;
+  tune it with exceptions or turn it off per repo.
 - **Live run log**, briefs as Markdown files, and a browser **Panel** that stays open while you click.
 - **Several accounts** — work and personal GitHub logins (and GitLab ones) side by side, each acting as itself.
 - **Settings UI** over a plain JSON file: global defaults, per-repo overrides, folder picker, repo auto-mapping.
 - **Diagnostics** for every CLI it needs (versions, logins), with copy-paste fixes.
 - **Self-updating** from GitHub releases, with checksum verification.
+
+All features: [docs/FEATURES.md](docs/FEATURES.md).
 
 ## Contents
 
