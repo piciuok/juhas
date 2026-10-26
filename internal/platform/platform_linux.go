@@ -116,6 +116,20 @@ func Ask(q Question) Choice {
 	return Later
 }
 
+// Info shows a message the user asked for (e.g. a manual update check) as a
+// dialog when zenity or kdialog is there, else as a notification.
+func Info(title, msg string) {
+	msg = trunc(msg, 900)
+	switch {
+	case has("zenity"):
+		_ = exec.Command("zenity", "--info", "--title", title, "--text", msg, "--timeout", "60").Run()
+	case has("kdialog"):
+		_ = exec.Command("kdialog", "--title", title, "--msgbox", msg).Run()
+	default:
+		Notify(Notification{Title: title, Message: msg})
+	}
+}
+
 func Notify(n Notification) {
 	if !has("notify-send") {
 		return

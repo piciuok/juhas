@@ -67,15 +67,22 @@ func (a *App) checkUpdate(manual bool) {
 	a.mu.Unlock()
 	note := func(msg string) {
 		if manual {
-			platform.Notify(platform.Notification{Title: "Juhas", Message: msg})
+			platform.Info("Juhas", msg) // asked for: a dialog, notifications may be muted
 		}
-	}
-	if _, err := update.ParseVersion(version); err != nil {
-		note("This is a development build (" + version + "): updates are off. Install a release to get them.")
-		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+	if _, err := update.ParseVersion(version); err != nil {
+		if !manual {
+			return
+		}
+		latest := "unknown"
+		if rel, err := (&update.Client{Version: version}).Latest(ctx, cfg.Updates.Prerelease); err == nil {
+			latest = rel.Tag
+		}
+		note("This is a development build (" + version + "), so it is not updated automatically. The latest release is " + latest + ".\n\nTo switch to releases: juhas update --force")
+		return
+	}
 	rel, err := (&update.Client{Version: version}).Latest(ctx, cfg.Updates.Prerelease)
 	a.mu.Lock()
 	st := a.upd
@@ -105,7 +112,10 @@ func (a *App) checkUpdate(manual bool) {
 	case cfg.Updates.AutoInstall:
 		a.logger.Printf("update: %s available, installing when idle", st.Latest)
 		go a.installUpdate()
-	case fresh || manual:
+	case manual:
+		a.logger.Printf("update: %s available", st.Latest)
+		note("Juhas " + st.Latest + " is available (you have " + version + ").\n\nChoose “⬆ Update” in the menu.")
+	case fresh:
 		a.logger.Printf("update: %s available", st.Latest)
 		platform.Notify(platform.Notification{Title: "Juhas " + st.Latest + " is available",
 			Message: "You have " + version + ". Choose “⬆ Update” in the menu, or click to read what's new.", Open: st.URL})

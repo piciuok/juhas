@@ -97,6 +97,14 @@ func Ask(q Question) Choice {
 	return Later
 }
 
+// Info shows a message the user asked for (e.g. a manual update check) as a
+// dialog, so it is seen even when notifications are muted. It blocks until
+// dismissed or after a minute.
+func Info(title, msg string) {
+	_ = exec.Command("/usr/bin/osascript", "-e", fmt.Sprintf(`display dialog %s with title %s buttons {"OK"} default button "OK" with icon note giving up after 60`,
+		asq(trunc(msg, 900)), asq(title))).Run()
+}
+
 func Notify(n Notification) {
 	if has("terminal-notifier") {
 		args := []string{"-title", n.Title, "-message", trunc(n.Message, 240), "-group", "juhas-" + n.Title}
