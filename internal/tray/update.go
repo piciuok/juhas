@@ -41,7 +41,18 @@ func (a *App) updateInfo() updateInfo {
 func (a *App) updateLoop() {
 	a.mu.Lock()
 	a.upd = update.LoadStatus(a.store.UpdatePath())
+	from, version := a.upd.UpdatedFrom, a.version
+	a.upd.UpdatedFrom = ""
+	st := a.upd
 	a.mu.Unlock()
+	if from != "" {
+		_ = update.SaveStatus(a.store.UpdatePath(), st)
+		if from != version {
+			// the icon went away for the restart: say it is back and done
+			a.logger.Printf("running %s (updated from %s)", version, from)
+			go platform.Info("Juhas", "Updated "+from+" → "+version+". Juhas is running again.")
+		}
+	}
 	timer := time.NewTimer(30 * time.Second)
 	for {
 		select {
@@ -184,6 +195,11 @@ func (a *App) installUpdate() {
 		}
 	}
 	a.logger.Printf("updated %s → %s, restarting", version, tag)
+	a.mu.Lock()
+	a.upd.UpdatedFrom = version
+	st := a.upd
+	a.mu.Unlock()
+	_ = update.SaveStatus(a.store.UpdatePath(), st)
 	platform.Notify(platform.Notification{Title: "Juhas updated to " + tag, Message: "Restarting…", Open: rel.URL})
 	time.Sleep(time.Second)            // let the notification go out
 	_ = os.Remove(WebURLFile(a.store)) // the new process serves on a new port

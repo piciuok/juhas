@@ -343,6 +343,9 @@ type Status struct {
 	URL       string    `json:"url,omitempty"`
 	Notified  string    `json:"notified,omitempty"` // version we already told the user about
 	Error     string    `json:"error,omitempty"`
+	// UpdatedFrom is set right before the restart into a new version, so
+	// the new process can say the update is done.
+	UpdatedFrom string `json:"updated_from,omitempty"`
 }
 
 func LoadStatus(path string) Status {
