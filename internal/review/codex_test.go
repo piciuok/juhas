@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"juhas/internal/config"
-	"juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/config"
+	"github.com/piciuok/juhas/internal/forge"
 )
 
 func TestCodexArgs(t *testing.T) {

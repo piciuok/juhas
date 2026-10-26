@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"juhas/internal/config"
-	"juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/config"
+	"github.com/piciuok/juhas/internal/forge"
 )
 
 // detectedAccount is a login gh/glab knows about.

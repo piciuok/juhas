@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/forge"
 )
 
 // Duration is a time.Duration that reads/writes as "3m", "48h", "".

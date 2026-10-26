@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"juhas/internal/app"
-	"juhas/internal/config"
-	"juhas/internal/doctor"
-	"juhas/internal/effects"
-	"juhas/internal/platform"
-	"juhas/internal/queue"
-	"juhas/internal/review"
-	"juhas/internal/state"
+	"github.com/piciuok/juhas/internal/app"
+	"github.com/piciuok/juhas/internal/config"
+	"github.com/piciuok/juhas/internal/doctor"
+	"github.com/piciuok/juhas/internal/effects"
+	"github.com/piciuok/juhas/internal/platform"
+	"github.com/piciuok/juhas/internal/queue"
+	"github.com/piciuok/juhas/internal/review"
+	"github.com/piciuok/juhas/internal/state"
 )
 
 // The panel is the browser page that mirrors the tray menu but stays open

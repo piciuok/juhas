@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"juhas/internal/config"
-	"juhas/internal/configui"
-	"juhas/internal/doctor"
-	"juhas/internal/platform"
-	"juhas/internal/review"
+	"github.com/piciuok/juhas/internal/config"
+	"github.com/piciuok/juhas/internal/configui"
+	"github.com/piciuok/juhas/internal/doctor"
+	"github.com/piciuok/juhas/internal/platform"
+	"github.com/piciuok/juhas/internal/review"
 )
 
 func init() {

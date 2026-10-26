@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"juhas/internal/config"
+	"github.com/piciuok/juhas/internal/config"
 )
 
 const (

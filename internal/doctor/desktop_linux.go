@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"juhas/internal/config"
+	"github.com/piciuok/juhas/internal/config"
 )
 
 func desktop(ctx context.Context, r *Report, cfg *config.Config) {

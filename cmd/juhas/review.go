@@ -9,12 +9,12 @@ import (
 	"strings"
 	"syscall"
 
-	"juhas/internal/config"
-	"juhas/internal/doctor"
-	"juhas/internal/forge"
-	"juhas/internal/queue"
-	"juhas/internal/review"
-	"juhas/internal/state"
+	"github.com/piciuok/juhas/internal/config"
+	"github.com/piciuok/juhas/internal/doctor"
+	"github.com/piciuok/juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/queue"
+	"github.com/piciuok/juhas/internal/review"
+	"github.com/piciuok/juhas/internal/state"
 )
 
 func init() {

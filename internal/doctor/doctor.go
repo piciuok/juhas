@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"juhas/internal/config"
-	"juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/config"
+	"github.com/piciuok/juhas/internal/forge"
 )
 
 type Level int

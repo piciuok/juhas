@@ -9,8 +9,8 @@ import (
 	"runtime"
 	"time"
 
-	"juhas/internal/config"
-	"juhas/internal/update"
+	"github.com/piciuok/juhas/internal/config"
+	"github.com/piciuok/juhas/internal/update"
 )
 
 func cmdUpdate(args []string) error {

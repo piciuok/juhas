@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
-	"juhas/internal/platform"
-	"juhas/internal/state"
-	"juhas/internal/update"
+	"github.com/piciuok/juhas/internal/platform"
+	"github.com/piciuok/juhas/internal/state"
+	"github.com/piciuok/juhas/internal/update"
 )
 
 // updateInfo is what the menu and the panel show about releases.

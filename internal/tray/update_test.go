@@ -3,7 +3,7 @@ package tray
 import (
 	"testing"
 
-	"juhas/internal/update"
+	"github.com/piciuok/juhas/internal/update"
 )
 
 func TestUpdateInfo(t *testing.T) {

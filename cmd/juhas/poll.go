@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"juhas/internal/config"
-	"juhas/internal/forge"
-	"juhas/internal/queue"
+	"github.com/piciuok/juhas/internal/config"
+	"github.com/piciuok/juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/queue"
 )
 
 func loadConfig() (*config.Config, error) {

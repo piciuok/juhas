@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"juhas/internal/config"
+	"github.com/piciuok/juhas/internal/config"
 )
 
 // Change is one mapping AutoMap made.

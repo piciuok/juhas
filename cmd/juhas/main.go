@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"juhas/internal/effects"
-	"juhas/internal/platform"
+	"github.com/piciuok/juhas/internal/effects"
+	"github.com/piciuok/juhas/internal/platform"
 )
 
 const usage = `juhas — PR/MRs to review + AI review (macOS, Linux)

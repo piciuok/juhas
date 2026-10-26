@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"juhas/internal/config"
-	"juhas/internal/forge"
-	"juhas/internal/state"
+	"github.com/piciuok/juhas/internal/config"
+	"github.com/piciuok/juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/state"
 )
 
 func TestQueuedLogNamesWhatItWaitsFor(t *testing.T) {

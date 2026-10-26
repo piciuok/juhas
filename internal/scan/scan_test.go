@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"juhas/internal/config"
+	"github.com/piciuok/juhas/internal/config"
 )
 
 func gitInit(t *testing.T, dir, origin string) {

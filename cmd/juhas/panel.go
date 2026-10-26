@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"juhas/internal/platform"
-	"juhas/internal/state"
-	"juhas/internal/tray"
+	"github.com/piciuok/juhas/internal/platform"
+	"github.com/piciuok/juhas/internal/state"
+	"github.com/piciuok/juhas/internal/tray"
 )
 
 // cmdPanel opens the running tray's panel page.

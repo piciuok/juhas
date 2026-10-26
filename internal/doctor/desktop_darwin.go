@@ -4,7 +4,7 @@ import (
 	"context"
 	"os/exec"
 
-	"juhas/internal/config"
+	"github.com/piciuok/juhas/internal/config"
 )
 
 func desktop(_ context.Context, r *Report, cfg *config.Config) {

@@ -20,18 +20,18 @@ import (
 
 	"fyne.io/systray"
 
-	"juhas/internal/app"
-	"juhas/internal/config"
-	"juhas/internal/configui"
-	"juhas/internal/doctor"
-	"juhas/internal/effects"
-	"juhas/internal/forge"
-	"juhas/internal/platform"
-	"juhas/internal/queue"
-	"juhas/internal/review"
-	"juhas/internal/scan"
-	"juhas/internal/state"
-	"juhas/internal/update"
+	"github.com/piciuok/juhas/internal/app"
+	"github.com/piciuok/juhas/internal/config"
+	"github.com/piciuok/juhas/internal/configui"
+	"github.com/piciuok/juhas/internal/doctor"
+	"github.com/piciuok/juhas/internal/effects"
+	"github.com/piciuok/juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/platform"
+	"github.com/piciuok/juhas/internal/queue"
+	"github.com/piciuok/juhas/internal/review"
+	"github.com/piciuok/juhas/internal/scan"
+	"github.com/piciuok/juhas/internal/state"
+	"github.com/piciuok/juhas/internal/update"
 )
 
 type App struct {

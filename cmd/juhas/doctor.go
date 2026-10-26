@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 
-	"juhas/internal/doctor"
+	"github.com/piciuok/juhas/internal/doctor"
 )
 
 // doctorOptions is extended by the review package hook (skill detection).

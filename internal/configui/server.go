@@ -27,12 +27,12 @@ import (
 	"sync"
 	"time"
 
-	"juhas/internal/config"
-	"juhas/internal/doctor"
-	"juhas/internal/forge"
-	"juhas/internal/review"
-	"juhas/internal/scan"
-	"juhas/internal/state"
+	"github.com/piciuok/juhas/internal/config"
+	"github.com/piciuok/juhas/internal/doctor"
+	"github.com/piciuok/juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/review"
+	"github.com/piciuok/juhas/internal/scan"
+	"github.com/piciuok/juhas/internal/state"
 )
 
 //go:embed index.html

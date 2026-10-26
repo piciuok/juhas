@@ -1,4 +1,4 @@
-module juhas
+module github.com/piciuok/juhas
 
 go 1.27.3
 

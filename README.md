@@ -39,6 +39,7 @@ All features: [docs/FEATURES.md](docs/FEATURES.md).
 - [Commands](#commands)
 - [Q&A](#qa)
 - [Contributing](#contributing)
+- [License](#license)
 
 ## Install
 
@@ -67,6 +68,8 @@ tar xzf juhas_*.tar.gz && cd juhas_*/
 **From source** (Go 1.27+; on macOS also the Xcode Command Line Tools, for cgo):
 
 ```sh
+go install github.com/piciuok/juhas/cmd/juhas@latest && juhas install
+# or from a checkout:
 make build && ./bin/juhas install
 ```
 
@@ -278,3 +281,9 @@ Pull requests are very welcome, especially ones that **extend what Juhas can do*
 
 For bigger changes, open an issue first so we can agree on the shape. Keep agents read-only: publishing
 always goes through the user's explicit acceptance. Before sending a PR, run `make vet test`.
+
+Security issues: please report them privately, as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE) © 2026 piciuok

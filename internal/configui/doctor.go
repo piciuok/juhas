@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"runtime"
 
-	"juhas/internal/doctor"
+	"github.com/piciuok/juhas/internal/doctor"
 )
 
 //go:embed doctor.html

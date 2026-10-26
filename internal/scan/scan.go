@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/forge"
 )
 
 // Clone is a local repository whose origin parsed into a key.

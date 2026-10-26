@@ -4,10 +4,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"juhas/internal/forge"
-	"juhas/internal/queue"
-	"juhas/internal/review"
-	"juhas/internal/state"
+	"github.com/piciuok/juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/queue"
+	"github.com/piciuok/juhas/internal/review"
+	"github.com/piciuok/juhas/internal/state"
 )
 
 func TestAwaitingDecision(t *testing.T) {

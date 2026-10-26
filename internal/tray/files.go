@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"juhas/internal/config"
-	"juhas/internal/doctor"
-	"juhas/internal/queue"
-	"juhas/internal/state"
+	"github.com/piciuok/juhas/internal/config"
+	"github.com/piciuok/juhas/internal/doctor"
+	"github.com/piciuok/juhas/internal/queue"
+	"github.com/piciuok/juhas/internal/state"
 )
 
 func saveSnapshot(store *state.Store, snap *queue.Snapshot) {

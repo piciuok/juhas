@@ -8,11 +8,11 @@ import (
 	"strings"
 	"sync"
 
-	"juhas/internal/config"
-	"juhas/internal/platform"
-	"juhas/internal/queue"
-	"juhas/internal/review"
-	"juhas/internal/state"
+	"github.com/piciuok/juhas/internal/config"
+	"github.com/piciuok/juhas/internal/platform"
+	"github.com/piciuok/juhas/internal/queue"
+	"github.com/piciuok/juhas/internal/review"
+	"github.com/piciuok/juhas/internal/state"
 )
 
 type Core struct {
