@@ -131,7 +131,7 @@ Output in markdown, concise and specific:
 ## Suggested verdict (approve / request changes / needs discussion) + why
 `)
 	}
-	fmt.Fprintf(&b, "\n%s\n\nThe last message is saved as the brief: it must contain the whole report and start with its heading. Do not guess — if something cannot be determined, say so plainly.\n", languageRules(s.Language))
+	fmt.Fprintf(&b, "\n%s\n\nThe last message is saved as the brief: it must contain the whole report and start with its heading. Do not guess — if something cannot be determined, say so plainly.\n", languageRules(s))
 	return b.String()
 }
 

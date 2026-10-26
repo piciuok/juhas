@@ -95,6 +95,12 @@ configuration reference.
     the general comment.
   - GitLab: diff discussions on the reviewed MR version, including unchanged context lines. A line outside
     the diff becomes a general note with its `file:line`.
+- **Approve or request changes** with the publish: pick *Comment only*, *Approve* or *Request changes* next
+  to the button. GitHub sends it as the review event; GitLab approves the reviewed commit (refused if the head
+  moved) and marks "changes requested" (17.2+). A change request needs a general comment that says why.
+- **Verdict rules** (`review.verdict_rules`, editable in Settings): how the agent picks approve / request
+  changes / needs discussion. By default: any BLOCK → request changes, only WARN/INFO → approve.
+  `review.publish_event: from_verdict` preselects that verdict on the page; the default `comment` does not.
 - **Safe publishing:**
   - Juhas warns you when new commits arrived after the review; a second click within 5 s publishes anyway.
   - A second click or a second tab cannot publish twice.

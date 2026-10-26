@@ -47,6 +47,30 @@ type Proposal struct {
 	Summary   ProposedComment   `json:"summary"` // the general comment (File empty)
 	Comments  []ProposedComment `json:"comments"`
 	CreatedAt time.Time         `json:"created_at"`
+	// Suggest is the publish action preselected on the page (review.publish_event).
+	Suggest  string    `json:"suggest,omitempty"`
+	Decision *Decision `json:"decision,omitempty"` // the last approve / request changes
+}
+
+// Decision is an approval or a change request sent with a publish.
+type Decision struct {
+	Event  string `json:"event"`  // forge.EventApprove | forge.EventRequestChanges
+	Status string `json:"status"` // CommentPosted | CommentFailed
+	URL    string `json:"url,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
+// EventFor maps the agent's verdict to a publish action: "approve",
+// "request_changes", or "comment" for anything else (e.g. needs discussion).
+func EventFor(verdict string) string {
+	v := strings.ToLower(verdict)
+	switch {
+	case strings.Contains(v, "request") || strings.Contains(v, "changes"):
+		return "request_changes"
+	case strings.HasPrefix(strings.TrimSpace(v), "approve"):
+		return "approve"
+	}
+	return "comment"
 }
 
 // proposalBlock matches the fenced ```juhas-review … ``` JSON block.

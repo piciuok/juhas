@@ -35,11 +35,11 @@ case "$*" in
   *) echo '{"diff_refs":{"base_sha":"b","head_sha":"h","start_sha":"s"}}';;
 esac`)
 	it := Item{Platform: GitLab, Repo: "gl.example/team/app", Number: 7, URL: "https://gl.example/team/app/-/merge_requests/7"}
-	sum, res := Publish(context.Background(), it, "Thanks!", []PostComment{
+	sum, res, _ := Publish(context.Background(), it, "Thanks!", []PostComment{
 		{ID: "c1", File: "apps/a.ts", Line: 12, Body: "inline"},
 		{ID: "c2", File: "apps/a.ts", Line: 99, Body: "line outside the diff"},
 		{ID: "c3", File: "not/in/diff.ts", Line: 3, Body: "file not in diff"},
-	})
+	}, EventComment)
 	if sum.Err != nil || !strings.HasSuffix(sum.URL, "#note_501") {
 		t.Errorf("summary: %+v", sum)
 	}
@@ -74,10 +74,10 @@ case "$*" in
   *"/issues/5/comments"*) echo '{"html_url":"https://github.com/o/r/pull/5#issuecomment-9"}';;
 esac`)
 	it := Item{Platform: GitHub, Repo: "github.com/o/r", Number: 5, HeadSHA: "abc"}
-	sum, res := Publish(context.Background(), it, "Podsumowanie", []PostComment{
+	sum, res, _ := Publish(context.Background(), it, "Podsumowanie", []PostComment{
 		{ID: "c1", File: "a.go", Line: 10, Body: "ok"},
 		{ID: "c2", File: "a.go", Line: 1000, Body: "bad line"},
-	})
+	}, EventComment)
 	if !strings.Contains(res[0].URL, "discussion_r1") || res[0].Err != nil {
 		t.Errorf("c1: %+v", res[0])
 	}
@@ -100,7 +100,7 @@ case "$*" in
   *) echo '{"html_url":"x"}';;
 esac`)
 	it := Item{Platform: GitHub, Repo: "github.com/o/r", Number: 5, HeadSHA: "abc"}
-	sum, res := Publish(context.Background(), it, "S", []PostComment{{ID: "c1", File: "a.go", Line: 10, Body: "ok"}})
+	sum, res, _ := Publish(context.Background(), it, "S", []PostComment{{ID: "c1", File: "a.go", Line: 10, Body: "ok"}}, EventComment)
 	if sum.Err == nil || res[0].Err == nil {
 		t.Errorf("a 502 must be reported, not retried: %+v %+v", sum, res)
 	}
@@ -119,11 +119,11 @@ case "$*" in
   *"/notes"*) echo '{"id": 8}';;
 esac`)
 	it := Item{Platform: GitLab, Repo: "gl.example/t/a", Number: 1, URL: "u", HeadSHA: "rev"}
-	_, res := Publish(context.Background(), it, "", []PostComment{
+	_, res, _ := Publish(context.Background(), it, "", []PostComment{
 		{ID: "c1", File: "a.ts", Line: 12, Body: "on context"},
 		{ID: "c2", File: "a.ts", Line: 11, Body: "on added"},
 		{ID: "c3", File: "a.ts", Line: 13, Body: "server error"},
-	})
+	}, EventComment)
 	b, _ := os.ReadFile(log)
 	calls := string(b)
 	if !strings.Contains(calls, `"head_sha":"rev"`) || !strings.Contains(calls, `"base_sha":"B"`) {
@@ -146,5 +146,72 @@ func TestHunkLine(t *testing.T) {
 		if o, ok := hunkLine(d, c.line); o != c.old || ok != c.ok {
 			t.Errorf("line %d: got %d %v", c.line, o, ok)
 		}
+	}
+}
+
+func TestPublishGitHubDecision(t *testing.T) {
+	log := fakeCLI(t, "gh", `echo '{"html_url":"https://github.com/o/r/pull/5#pullrequestreview-1"}'`)
+	it := Item{Platform: GitHub, Repo: "github.com/o/r", Number: 5, HeadSHA: "abc"}
+	_, _, dec := Publish(context.Background(), it, "", nil, EventApprove)
+	if dec.Err != nil || !strings.Contains(dec.URL, "pullrequestreview-1") {
+		t.Errorf("approve: %+v", dec)
+	}
+	if b, _ := os.ReadFile(log); !strings.Contains(string(b), `"event":"APPROVE"`) {
+		t.Errorf("calls:\n%s", b)
+	}
+	if _, _, dec := Publish(context.Background(), it, "S", nil, EventComment); dec.ID != "" {
+		t.Errorf("comment only must not report a decision: %+v", dec)
+	}
+}
+
+func TestPublishGitHubRequestChangesAfterFallback(t *testing.T) {
+	log := fakeCLI(t, "gh", `
+case "$*" in
+  *"/reviews"*) case "$in" in *'"comments"'*) echo 'gh: Unprocessable Entity (HTTP 422)' >&2; exit 1;; *) echo '{"html_url":"rv"}';; esac;;
+  *"/pulls/5/comments"*) echo 'gh: Validation Failed (HTTP 422)' >&2; exit 1;;
+  *"/issues/"*) echo '{"html_url":"issue"}';;
+esac`)
+	it := Item{Platform: GitHub, Repo: "github.com/o/r", Number: 5, HeadSHA: "abc"}
+	sum, res, dec := Publish(context.Background(), it, "Why", []PostComment{{ID: "c1", File: "a.go", Line: 1000, Body: "bad line"}}, EventRequestChanges)
+	b, _ := os.ReadFile(log)
+	calls := string(b)
+	if dec.Err != nil || dec.URL != "rv" || sum.URL != "rv" || res[0].URL != "rv" {
+		t.Errorf("sum %+v res %+v dec %+v", sum, res, dec)
+	}
+	if strings.Contains(calls, "/issues/") || !strings.Contains(calls, `"event":"REQUEST_CHANGES"`) || !strings.Contains(calls, "bad line") {
+		t.Errorf("the folded comments must go as the change request body:\n%s", calls)
+	}
+}
+
+func TestPublishGitLabDecision(t *testing.T) {
+	log := fakeCLI(t, "glab", `
+case "$*" in
+  *"/approve"*) echo '{"id":1}';;
+  *graphql*) echo '{"data":{"mergeRequestRequestChanges":{"errors":[]}}}';;
+  *) echo '{"diff_refs":{}}';;
+esac`)
+	it := Item{Platform: GitLab, Repo: "gl.example/t/a", Number: 4, URL: "u", HeadSHA: "rev"}
+	if _, _, dec := Publish(context.Background(), it, "", nil, EventApprove); dec.Err != nil || dec.URL != "u" {
+		t.Errorf("approve: %+v", dec)
+	}
+	if _, _, dec := Publish(context.Background(), it, "", nil, EventRequestChanges); dec.Err != nil {
+		t.Errorf("request changes: %+v", dec)
+	}
+	b, _ := os.ReadFile(log)
+	calls := string(b)
+	if !strings.Contains(calls, `merge_requests/4/approve --input - | {"sha":"rev"}`) || !strings.Contains(calls, `"p":"t/a"`) || !strings.Contains(calls, `"iid":"4"`) {
+		t.Errorf("calls:\n%s", calls)
+	}
+}
+
+func TestPublishGitLabRequestChangesUnsupported(t *testing.T) {
+	fakeCLI(t, "glab", `
+case "$*" in
+  *graphql*) echo '{"errors":[{"message":"Field mergeRequestRequestChanges does not exist on type Mutation"}]}';;
+  *) echo '{"diff_refs":{}}';;
+esac`)
+	it := Item{Platform: GitLab, Repo: "gl.example/t/a", Number: 4, URL: "u"}
+	if _, _, dec := Publish(context.Background(), it, "", nil, EventRequestChanges); dec.Err == nil || !strings.Contains(dec.Err.Error(), "does not exist") {
+		t.Errorf("want the GraphQL error: %+v", dec)
 	}
 }

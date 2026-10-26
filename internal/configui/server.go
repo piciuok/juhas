@@ -232,9 +232,17 @@ func (s *Server) reviewPublish(w http.ResponseWriter, r *http.Request) (any, err
 	var req struct {
 		Job   string `json:"job"`
 		Force bool   `json:"force"`
+		Event string `json:"event"` // comment (default) | approve | request_changes
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req); err != nil {
 		return nil, err
+	}
+	switch req.Event {
+	case "":
+		req.Event = forge.EventComment
+	case forge.EventComment, forge.EventApprove, forge.EventRequestChanges:
+	default:
+		return nil, fmt.Errorf("unknown action %q", req.Event)
 	}
 	path, err := proposalFile(req.Job)
 	if err != nil {
@@ -275,10 +283,19 @@ func (s *Server) reviewPublish(w http.ResponseWriter, r *http.Request) (any, err
 			comments = append(comments, forge.PostComment{ID: c.ID, File: c.File, Line: c.Line, Body: c.Body})
 		}
 	}
-	if summary == "" && len(comments) == 0 {
+	if summary == "" && len(comments) == 0 && req.Event == forge.EventComment {
 		return nil, errors.New("nothing is accepted")
 	}
-	sum, res := forge.Publish(r.Context(), it, summary, comments)
+	if summary == "" && req.Event == forge.EventRequestChanges {
+		return nil, errors.New("requesting changes needs an accepted general comment that says why")
+	}
+	sum, res, dec := forge.Publish(r.Context(), it, summary, comments, req.Event)
+	if req.Event != forge.EventComment {
+		p.Decision = &review.Decision{Event: req.Event, Status: review.CommentPosted, URL: dec.URL}
+		if dec.Err != nil {
+			p.Decision.Status, p.Decision.Error = review.CommentFailed, dec.Err.Error()
+		}
+	}
 	apply := func(pr forge.PostResult) {
 		c, err := p.Find(pr.ID)
 		if err != nil {

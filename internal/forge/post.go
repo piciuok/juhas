@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -32,6 +33,13 @@ type PostResult struct {
 	Err  error
 }
 
+// What a publish does besides posting the comments.
+const (
+	EventComment        = "comment"
+	EventApprove        = "approve"
+	EventRequestChanges = "request_changes"
+)
+
 // runInput is run with a request body on stdin (gh/glab api --input -).
 func runInput(ctx context.Context, env []string, body []byte, name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, Timeout)
@@ -51,9 +59,11 @@ func runInput(ctx context.Context, env []string, body []byte, name string, args 
 	return stdout.Bytes(), nil
 }
 
-// Publish posts the summary (if not empty) and the inline comments.
-// It acts as the account that found the PR/MR.
-func Publish(ctx context.Context, it Item, summary string, comments []PostComment) (PostResult, []PostResult) {
+// Publish posts the summary (if not empty) and the inline comments, then
+// approves or requests changes when event says so (the decision result has
+// ID "decision"; empty for EventComment). It acts as the account that found
+// the PR/MR.
+func Publish(ctx context.Context, it Item, summary string, comments []PostComment, event string) (sum PostResult, res []PostResult, decision PostResult) {
 	acc, err := PublishAccount(it)
 	var env []string
 	if err == nil {
@@ -68,12 +78,70 @@ func Publish(ctx context.Context, it Item, summary string, comments []PostCommen
 		if strings.TrimSpace(summary) == "" {
 			sum = PostResult{}
 		}
-		return sum, res
+		if event != EventComment && event != "" {
+			decision = PostResult{ID: "decision", Err: err}
+		}
+		return sum, res, decision
 	}
 	if it.Platform == GitHub {
-		return publishGitHub(ctx, env, it, summary, comments)
+		return publishGitHub(ctx, env, it, summary, comments, event)
 	}
-	return publishGitLab(ctx, env, it, summary, comments)
+	sum, res = publishGitLab(ctx, env, it, summary, comments)
+	// after the comments, so the approval or request lands last
+	switch event {
+	case EventApprove:
+		decision = glApprove(ctx, env, it)
+	case EventRequestChanges:
+		decision = glRequestChanges(ctx, env, it)
+	}
+	return sum, res, decision
+}
+
+// glApprove approves the reviewed commit: GitLab refuses when the head moved.
+func glApprove(ctx context.Context, env []string, it Item) PostResult {
+	host, project := SplitKey(it.Repo)
+	b, _ := json.Marshal(map[string]string{"sha": it.HeadSHA})
+	_, err := runInput(ctx, env, b, "glab", "api", "--hostname", host, "-X", "POST", "-H", "Content-Type: application/json",
+		fmt.Sprintf("projects/%s/merge_requests/%d/approve", url.PathEscape(project), it.Number), "--input", "-")
+	if err != nil {
+		return PostResult{ID: "decision", Err: fmt.Errorf("approve: %w", err)}
+	}
+	return PostResult{ID: "decision", URL: it.URL}
+}
+
+// glRequestChanges sets "changes requested" (GraphQL, GitLab 17.2+).
+func glRequestChanges(ctx context.Context, env []string, it Item) PostResult {
+	host, project := SplitKey(it.Repo)
+	b, _ := json.Marshal(map[string]any{
+		"query":     `mutation($p: ID!, $iid: String!) { mergeRequestRequestChanges(input: {projectPath: $p, iid: $iid}) { errors } }`,
+		"variables": map[string]string{"p": project, "iid": strconv.Itoa(it.Number)},
+	})
+	out, err := runInput(ctx, env, b, "glab", "api", "--hostname", host, "-X", "POST", "-H", "Content-Type: application/json", "graphql", "--input", "-")
+	var r struct {
+		Data struct {
+			M *struct {
+				Errors []string `json:"errors"`
+			} `json:"mergeRequestRequestChanges"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	switch {
+	case err != nil:
+	case json.Unmarshal(out, &r) != nil:
+		err = errors.New("unexpected response from GitLab")
+	case len(r.Errors) > 0:
+		err = errors.New(r.Errors[0].Message)
+	case r.Data.M == nil:
+		err = errors.New("not supported by this GitLab (needs 17.2+)")
+	case len(r.Data.M.Errors) > 0:
+		err = errors.New(strings.Join(r.Data.M.Errors, "; "))
+	}
+	if err != nil {
+		return PostResult{ID: "decision", Err: fmt.Errorf("request changes: %w", err)}
+	}
+	return PostResult{ID: "decision", URL: it.URL}
 }
 
 func publishGitLab(ctx context.Context, env []string, it Item, summary string, comments []PostComment) (PostResult, []PostResult) {
@@ -279,7 +347,18 @@ func rejected(err error) bool {
 	return m != nil && (m[1] == "422" || m[1] == "400")
 }
 
-func publishGitHub(ctx context.Context, env []string, it Item, summary string, comments []PostComment) (PostResult, []PostResult) {
+func publishGitHub(ctx context.Context, env []string, it Item, summary string, comments []PostComment, event string) (PostResult, []PostResult, PostResult) {
+	ghEvent := map[string]string{EventApprove: "APPROVE", EventRequestChanges: "REQUEST_CHANGES"}[event]
+	if ghEvent == "" {
+		ghEvent = "COMMENT"
+	}
+	decided := func(r PostResult) PostResult {
+		if ghEvent == "COMMENT" {
+			return PostResult{}
+		}
+		r.ID, r.Note = "decision", ""
+		return r
+	}
 	host, repo := SplitKey(it.Repo)
 	api := func(method, path string, body any) ([]byte, error) {
 		b, _ := json.Marshal(body)
@@ -305,7 +384,7 @@ func publishGitHub(ctx context.Context, env []string, it Item, summary string, c
 	for _, c := range outside {
 		reviewBody += fmt.Sprintf("\n\n**`%s`**\n\n%s", c.File, c.Body)
 	}
-	payload := map[string]any{"commit_id": it.HeadSHA, "event": "COMMENT", "body": strings.TrimSpace(reviewBody), "comments": inline}
+	payload := map[string]any{"commit_id": it.HeadSHA, "event": ghEvent, "body": strings.TrimSpace(reviewBody), "comments": inline}
 	out, err := api("POST", fmt.Sprintf("repos/%s/pulls/%d/reviews", repo, it.Number), payload)
 	var rv struct {
 		HTMLURL string `json:"html_url"`
@@ -323,7 +402,7 @@ func publishGitHub(ctx context.Context, env []string, it Item, summary string, c
 			}
 			res = append(res, r)
 		}
-		return sum, res
+		return sum, res, decided(sum)
 	}
 	if !rejected(err) {
 		// a timeout or 5xx may have created the review: report, never repost
@@ -331,7 +410,7 @@ func publishGitHub(ctx context.Context, env []string, it Item, summary string, c
 		for _, c := range comments {
 			res = append(res, PostResult{ID: c.ID, Err: err})
 		}
-		return sum, res
+		return sum, res, decided(sum)
 	}
 	// One bad line fails the whole review (422): post comments one by one and
 	// fold the ones GitHub rejects into the summary comment.
@@ -365,8 +444,14 @@ func publishGitHub(ctx context.Context, env []string, it Item, summary string, c
 	}
 	sum := PostResult{ID: "summary"}
 	body := strings.TrimSpace(strings.Join(append([]string{summary}, folded...), "\n\n"))
-	if body != "" {
-		out, err := api("POST", fmt.Sprintf("repos/%s/issues/%d/comments", repo, it.Number), map[string]string{"body": body})
+	if body != "" || ghEvent != "COMMENT" {
+		// with a decision the general comment goes as the review body
+		path, payload := fmt.Sprintf("repos/%s/issues/%d/comments", repo, it.Number), map[string]string{"body": body}
+		if ghEvent != "COMMENT" {
+			path = fmt.Sprintf("repos/%s/pulls/%d/reviews", repo, it.Number)
+			payload = map[string]string{"body": body, "event": ghEvent, "commit_id": it.HeadSHA}
+		}
+		out, err := api("POST", path, payload)
 		var ic struct {
 			HTMLURL string `json:"html_url"`
 		}
@@ -386,5 +471,5 @@ func publishGitHub(ctx context.Context, env []string, it Item, summary string, c
 			}
 		}
 	}
-	return sum, res
+	return sum, res, decided(sum)
 }

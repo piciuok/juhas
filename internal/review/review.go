@@ -126,10 +126,24 @@ func LangName(code string) string {
 }
 
 // languageRules sets the brief language and asks for the comment proposal.
-func languageRules(l config.Language) string {
+func languageRules(s config.Settings) string {
 	return fmt.Sprintf(`Language: write the whole brief (the report for me) in %s. Leave code identifiers, file names and commands untranslated.
 
-%s`, LangName(l.Brief), ProposalPromptRules(l.Comments))
+%s%s`, LangName(s.Language.Brief), ProposalPromptRules(s.Language.Comments), verdictRules(s.Review.VerdictRules))
+}
+
+// verdictRules is review.verdict_rules as a prompt section ("" when empty).
+func verdictRules(rules []string) string {
+	var b strings.Builder
+	for _, r := range rules {
+		if r = strings.TrimSpace(r); r != "" {
+			b.WriteString("\n- " + r)
+		}
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return "\n- Pick the verdict by these rules (the first one that matches):" + strings.ReplaceAll(b.String(), "\n- ", "\n  - ")
 }
 
 // Prompt builds the stdin prompt for item reviewed with m.
@@ -146,7 +160,7 @@ func Prompt(it forge.Item, m Method, s config.Settings) string {
 		if r.SkillArgs != "" {
 			arg += " " + r.SkillArgs
 		}
-		fmt.Fprintf(&b, "Run the skill `%s` (with the Skill tool) with arguments: `%s`.\n\n%s\n%s\n\n%s\n\n", name, arg, ctx, rules, languageRules(s.Language))
+		fmt.Fprintf(&b, "Run the skill `%s` (with the Skill tool) with arguments: `%s`.\n\n%s\n%s\n\n%s\n\n", name, arg, ctx, rules, languageRules(s))
 		b.WriteString("At the end, write out the full report in markdown: verdict, findings (file:line, severity, rationale), questions for the author. The last message is saved as the brief — it must contain the whole report, not a summary, and start with the report heading (no progress messages like \"waiting for the reviewers\").\n")
 	default:
 		view, diff, ci := commands(it)
@@ -174,7 +188,7 @@ Output in markdown, concise and specific:
 ## Tests and CI
 ## Suggested verdict (approve / request changes / needs discussion) + why
 Do not guess — if something cannot be determined, say so plainly.
-`, ctx, rules, view, diff, ci, languageRules(s.Language))
+`, ctx, rules, view, diff, ci, languageRules(s))
 	}
 	return b.String()
 }
@@ -372,6 +386,10 @@ func Run(ctx context.Context, cfg *config.Config, s config.Settings, it forge.It
 	if prop != nil {
 		prop.URL, prop.Repo, prop.Number, prop.Title, prop.Platform, prop.Account = it.URL, it.Repo, it.Number, it.Title, it.Platform, it.Account
 		prop.HeadSHA, prop.Agent, prop.CreatedAt = it.HeadSHA, agent, time.Now()
+		prop.Suggest = "comment"
+		if s.Review.PublishEvent == config.PublishFromVerdict {
+			prop.Suggest = EventFor(prop.Verdict)
+		}
 		if err := SaveProposal(ProposalPath(logPath), prop); err != nil {
 			fmt.Fprintf(log, "%s ! saving proposal: %v\n", stamp(), err)
 		} else {

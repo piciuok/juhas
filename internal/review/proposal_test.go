@@ -93,3 +93,24 @@ func TestExtractProposalTakesLastBlock(t *testing.T) {
 		t.Errorf("got %+v %v", p, err)
 	}
 }
+
+func TestEventFor(t *testing.T) {
+	for v, want := range map[string]string{
+		"approve": "approve", "Approve — minor nits only": "approve", "request changes": "request_changes",
+		"Request Changes": "request_changes", "needs discussion": "comment", "": "comment",
+	} {
+		if got := EventFor(v); got != want {
+			t.Errorf("%q: got %s, want %s", v, got, want)
+		}
+	}
+}
+
+func TestVerdictRulesInPrompt(t *testing.T) {
+	if verdictRules(nil) != "" || verdictRules([]string{" "}) != "" {
+		t.Error("no rules must add nothing")
+	}
+	got := verdictRules([]string{"request changes: any BLOCK", "approve: otherwise"})
+	if !strings.Contains(got, "  - request changes: any BLOCK\n  - approve: otherwise") {
+		t.Errorf("got %q", got)
+	}
+}

@@ -195,6 +195,11 @@ Full example: [`config.example.json`](config.example.json).
    On the proposal page you accept, edit or reject each one; *Publish accepted* posts them from your gh/glab
    account, as diff discussions on GitLab and as a review on GitHub. A line outside the diff goes into the
    general comment with its `file:line`. If new commits arrived since the review, Juhas warns you first.
+   Next to *Publish* you pick what goes with the comments: comment only, **approve** or **request changes**
+   (GitLab: approval of the reviewed commit, and "changes requested" on 17.2+). `review.publish_event:
+   from_verdict` preselects the agent's verdict; the default `comment` preselects comment only. The agent
+   picks its verdict by `review.verdict_rules` (by default: any BLOCK → request changes, only WARN/INFO →
+   approve), editable in Settings.
    **The agent itself never publishes anything.**
 
 Worth knowing:

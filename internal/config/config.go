@@ -229,11 +229,20 @@ type Review struct {
 	// and blocks writes; off lets the agent do anything its tools allow.
 	Guard      string   `json:"guard"`
 	GuardAllow []string `json:"guard_allow"` // exceptions: "mcp__jira__addComment", "mcp__x__*", "Bash(git push*)"
+	// VerdictRules tell the agent which verdict to pick, one rule per line;
+	// empty leaves it to the agent.
+	VerdictRules []string `json:"verdict_rules"`
+	// PublishEvent is the action preselected on the proposal page: comment,
+	// or from_verdict (approve / request changes as the agent suggests).
+	PublishEvent string `json:"publish_event"`
 }
 
 const (
 	GuardReadOnly = "read-only"
 	GuardOff      = "off"
+
+	PublishComment     = "comment"
+	PublishFromVerdict = "from_verdict"
 )
 
 type Urgent struct {
@@ -270,7 +279,13 @@ const builtinSettings = `{
     "allowed_tools": [],
     "disallowed_tools": [],
     "guard": "read-only",
-    "guard_allow": []
+    "guard_allow": [],
+    "verdict_rules": [
+      "request changes: at least one BLOCK comment (a bug, a security or data-loss risk, a broken build or API contract)",
+      "approve: only WARN/INFO comments, or none",
+      "needs discussion: the approach or the scope itself is unclear"
+    ],
+    "publish_event": "comment"
   },
   "urgent": { "labels": ["urgent", "priority::high", "hotfix"], "older_than": "", "target_branches": [] },
   "flash": true,
@@ -578,6 +593,11 @@ func (s Settings) validate() error {
 	case GuardReadOnly, GuardOff:
 	default:
 		return fmt.Errorf("review.guard %q: want read-only|off", s.Review.Guard)
+	}
+	switch s.Review.PublishEvent {
+	case PublishComment, PublishFromVerdict:
+	default:
+		return fmt.Errorf("review.publish_event %q: want comment|from_verdict", s.Review.PublishEvent)
 	}
 	if s.Agent != AgentClaude && s.Agent != AgentCodex {
 		return fmt.Errorf("agent %q: want claude|codex", s.Agent)

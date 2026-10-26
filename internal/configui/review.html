@@ -58,6 +58,8 @@ textarea:disabled { border-style: dashed; color: var(--muted); }
 .code .msg { padding: 10px; color: var(--muted); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 10px 20px; display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
 footer .count { color: var(--muted); font-size: 13px; margin-right: auto; }
+footer select { font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+.verdict .dec { font-size: 13px; margin-left: 8px; }
 </style>
 </head>
 <body>
@@ -74,6 +76,11 @@ footer .count { color: var(--muted); font-size: 13px; margin-right: auto; }
 <footer>
   <span class="count" id="count"></span>
   <span id="saved" class="count" style="margin-right:0"></span>
+  <select id="event" title="What to send with the comments">
+    <option value="comment">Comment only</option>
+    <option value="approve">✓ Approve</option>
+    <option value="request_changes">✕ Request changes</option>
+  </select>
   <button class="primary" id="publish" disabled>Publish accepted</button>
 </footer>
 <script>
@@ -101,6 +108,7 @@ async function api(path, body) {
 
 let P = null, stale = false, confirmForce = 0, publishing = false;
 const all = () => (P.summary && P.summary.body ? [P.summary] : []).concat(P.comments || []);
+const EVENT = { comment: "comment only", approve: "approve", request_changes: "request changes" };
 const LABEL = { pending: "awaiting decision", accepted: "accepted", rejected: "rejected", posted: "published", failed: "publish failed" };
 
 let saveTimer = null;
@@ -124,8 +132,10 @@ function counts() {
   const posted = a.filter((c) => c.status === "posted").length;
   $("#count").textContent = `${acc} accepted · ${pend} awaiting decision · ${posted} published`;
   if (publishing) return; // the button stays "Publishing…" until the server answers
-  $("#publish").disabled = acc === 0;
-  $("#publish").textContent = acc ? `Publish accepted (${acc})` : "Publish accepted";
+  const ev = $("#event").value;
+  $("#publish").disabled = acc === 0 && ev === "comment";
+  const what = { comment: "", approve: " + approve", request_changes: " + request changes" }[ev];
+  $("#publish").textContent = acc ? `Publish accepted (${acc})${what}` : ev === "approve" ? "Approve" : `Publish accepted${what}`;
 }
 
 // File preview: the diff of the file a comment is about, or the whole file at
@@ -207,6 +217,12 @@ function card(c) {
     !posted && c.status !== "rejected" ? h("div", { class: "note" }, "You can edit the text before accepting; it saves automatically.") : null);
 }
 
+function verdict() {
+  const v = $("#verdict"); v.replaceChildren(P.verdict ? "Agent's verdict: " + P.verdict : "");
+  const d = P.decision;
+  if (d) v.append(h("span", { class: "dec note" }, d.status === "posted" ? `· sent: ${EVENT[d.event]}` : `· ${EVENT[d.event]} failed: ${d.error}`));
+}
+
 function render() {
   const list = $("#list"); list.replaceChildren(...all().map(card));
   if (!all().length) list.append(h("p", { class: "note" }, "The agent proposed no comments."));
@@ -221,7 +237,9 @@ async function load() {
     $("#title").replaceChildren(h("a", { href: P.url, target: "_blank", rel: "noopener" }, `${ref} ${P.title}`),
       h("span", { class: "sub" }, `${P.repo} · ${P.agent} · head ${String(P.head_sha || "").slice(0, 10)} · ${new Date(P.created_at).toLocaleString()}`));
     document.title = `📝 ${ref} — review proposal`;
-    $("#verdict").textContent = P.verdict ? "Agent's verdict: " + P.verdict : "";
+    verdict();
+    // a decision already sent is not preselected again
+    $("#event").value = P.decision && P.decision.status === "posted" ? "comment" : (P.suggest || "comment");
     const b = $("#banners"); b.replaceChildren();
     if (stale) b.append(h("div", { class: "banner warn" }, `New commits since the review (now ${String(r.head_now).slice(0, 10)}). Line numbers may be off — consider reviewing again.`));
     if (r.lookup_error) b.append(h("div", { class: "banner err" }, "Couldn't check the PR/MR: " + r.lookup_error));
@@ -240,11 +258,18 @@ $("#publish").addEventListener("click", async () => {
   $("#publish").disabled = true; $("#publish").textContent = "Publishing…";
   try {
     await api("/api/review/save", { job: JOB, comments: all().map((c) => ({ id: c.id, body: c.body, status: c.status })) });
-    const r = await api("/api/review/publish", { job: JOB, force });
+    const ev = $("#event").value;
+    const r = await api("/api/review/publish", { job: JOB, force, event: ev });
     publishing = false;
-    P = r.proposal; render();
+    P = r.proposal; render(); verdict();
     const failed = all().filter((c) => c.status === "failed").length;
-    $("#banners").prepend(h("div", { class: "banner " + (failed ? "err" : "ok") }, failed ? `Published with errors (${failed}) — check the marked comments.` : "Published the accepted comments."));
+    const d = ev !== "comment" ? P.decision : null;
+    const bad = failed || (d && d.status !== "posted");
+    let msg = failed ? `Published with errors (${failed}) — check the marked comments.` : "Published the accepted comments.";
+    if (d) msg += d.status === "posted" ? ` Sent: ${EVENT[ev]}.` : ` ${EVENT[ev]} failed: ${d.error}`;
+    if (d && d.status === "posted") $("#event").value = "comment";
+    counts();
+    $("#banners").prepend(h("div", { class: "banner " + (bad ? "err" : "ok") }, msg));
   } catch (e) {
     publishing = false;
     if (e.message.startsWith("stale:")) stale = true; // pushed after the page loaded: the next click can force
@@ -253,6 +278,7 @@ $("#publish").addEventListener("click", async () => {
     counts();
   }
 });
+$("#event").addEventListener("change", counts);
 load();
 </script>
 </body>
