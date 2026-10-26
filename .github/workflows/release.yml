@@ -71,6 +71,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # a release made by hand for the tag keeps its title and notes: just add the files
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz dist/checksums.txt --clobber
+            exit 0
+          fi
           flags=""
           case "$GITHUB_REF_NAME" in *-*) flags="--prerelease";; esac
           gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/checksums.txt \
