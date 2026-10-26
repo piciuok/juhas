@@ -956,15 +956,19 @@ func menuSignature(snap *queue.Snapshot, st *state.State, rep *doctor.Report, po
 	return b.String()
 }
 
-// entryLabel is "    • !883 title…   +1 ~2". The systray library has no
-// right-aligned column, so the counter closes the label after a fixed-width
-// title, which lines the counters up closely enough.
+// entryLabel is "    • !883 title…   +1 ~2 · author". The systray library
+// has no right-aligned column or smaller font, so the counter closes the
+// label after a fixed-width title, which lines the counters up closely
+// enough, and the author follows it.
 func entryLabel(icon string, e queue.Entry) string {
 	const width = 56
 	title := []rune(trunc(e.Title, width))
 	pad := ""
 	if f := e.Files.String(); f != "" {
 		pad = strings.Repeat(" ", width-len(title)+2) + "  " + f
+	}
+	if e.Author != "" {
+		pad += "  · " + e.Author
 	}
 	return fmt.Sprintf("    %s %s %s%s", icon, e.Ref(), string(title), pad)
 }
