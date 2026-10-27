@@ -185,6 +185,7 @@ type Config struct {
 	GitHub         []Host                     `json:"github"`
 	GitLab         []Host                     `json:"gitlab"`
 	Updates        Updates                    `json:"updates"`
+	WorkingHours   WorkingHours               `json:"working_hours"`
 	Defaults       json.RawMessage            `json:"defaults,omitempty"`
 	Repos          map[string]json.RawMessage `json:"repos"`
 
@@ -365,6 +366,12 @@ func (c *Config) applyDefaults() {
 	if c.FlashInterval == 0 {
 		c.FlashInterval = Duration(600 * time.Millisecond)
 	}
+	if c.WorkingHours.From == "" {
+		c.WorkingHours.From = "08:00"
+	}
+	if c.WorkingHours.To == "" {
+		c.WorkingHours.To = "16:00"
+	}
 	if c.Updates.Interval <= 0 {
 		c.Updates.Interval = Duration(24 * time.Hour)
 	}
@@ -473,6 +480,9 @@ func (c *Config) Validate() error {
 		if n > 1 {
 			return fmt.Errorf("gitlab %s: %d accounts use glab's default login — glab has one login per host, give the others their own config_dir", host, n)
 		}
+	}
+	if err := c.WorkingHours.validate(); err != nil {
+		return err
 	}
 	if c.PollInterval.D() > 0 && c.PollInterval.D() < MinPollInterval {
 		return fmt.Errorf("poll_interval %s: at least %s", c.PollInterval.D(), MinPollInterval)

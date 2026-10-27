@@ -22,6 +22,10 @@ configuration reference.
 - **A quiet first poll:** PR/MRs that are already open when you install Juhas are recorded silently, so it
   does not ask about all of them at once. If that poll fails (e.g. no network at login), the next one starts over.
 - **Per-repo counters:** open PR/MRs, what waits for you, and changed files as `+new ~modified −deleted`.
+- **Working hours** (`working_hours`, e.g. 08:00–16:00 Mon–Fri): outside them Juhas does not check on its own and
+  nothing calls for you — no questions, notifications, kicks or sparks; the icon is a magnifier asleep in bed.
+  *Check now* still refreshes the list, *☀️ Work now* (menu, Panel) wakes it for an hour, and what came in
+  overnight is asked about when the hours start.
 - **New commits** on a PR/MR that was reviewed, skipped or postponed bring it back with a "changed" question.
 
 ## Several accounts

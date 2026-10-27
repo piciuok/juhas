@@ -106,7 +106,7 @@ func (a *App) checkUpdate(manual bool) {
 		st.Latest, st.URL = rel.Tag, rel.URL
 	}
 	newer, _ := update.Newer(version, st.Latest)
-	fresh := err == nil && newer && st.Notified != st.Latest
+	fresh := err == nil && newer && st.Notified != st.Latest && (manual || !a.offHoursLocked())
 	if fresh {
 		st.Notified = st.Latest
 	}

@@ -25,6 +25,8 @@ func TestRenderDecodes(t *testing.T) {
 		"zap-linux":       {Badge: true, Urgent: 3, Flash: true, Frame: 3},
 		"ask-linux-0":     {Badge: true, Queued: 3, Decide: 2, Ask: true, Frame: 0},
 		"ask-linux-1":     {Badge: true, Queued: 3, Decide: 2, Ask: true, Frame: 1},
+		"sleep-tmpl":      {Template: true, Queued: 3, Sleep: true},
+		"sleep-linux":     {Badge: true, Queued: 3, Urgent: 1, Sleep: true},
 	}
 	dir := os.Getenv("ICON_DUMP_DIR") // set to eyeball the PNGs
 	for name, s := range states {

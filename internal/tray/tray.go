@@ -58,6 +58,8 @@ type App struct {
 	upd        update.Status
 	installing bool // an update is downloading or waiting for reviews to finish
 	frame      int
+	awakeUntil time.Time // "Work now": working hours ignored until then
+	sleeping   bool      // off hours, as last drawn
 	menuSig    string
 	limits     limitsLine // cached: Codex is read from its session files
 	ui         *configui.Server
@@ -262,9 +264,14 @@ func (a *App) poke(manual bool) {
 func (a *App) pollLoop() {
 	manual := false
 	for {
-		a.poll(manual)
+		if manual || !a.offHours() {
+			a.poll(manual)
+		}
 		a.mu.Lock()
 		every := a.cfg.PollInterval.D()
+		if next := a.hoursChange(); !next.IsZero() && time.Until(next) < every {
+			every = time.Until(next) + time.Second // check as soon as working hours start
+		}
 		a.mu.Unlock()
 		select {
 		case <-a.quit:
@@ -320,11 +327,58 @@ func (a *App) poll(manual bool) {
 	a.mu.Lock()
 	a.snap, a.polling, a.lastErr = snap, false, ""
 	a.mu.Unlock()
+	if a.offHours() {
+		// a manual check off hours only refreshes the list: no questions,
+		// kicks or auto reviews — they come when working hours start
+		a.requestRedraw()
+		return
+	}
 	st, _ := a.store.Read()
 	active, _ := split(snap, st)
 	a.kick(active)
 	core.HandleNew(snap, manual) // the full list: reviewed items may need a recheck
 	a.requestRedraw()
+}
+
+// offHours: outside working hours, and no "Work now" in effect.
+func (a *App) offHours() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.offHoursLocked()
+}
+
+func (a *App) offHoursLocked() bool {
+	now := time.Now()
+	if a.cfg == nil || now.Before(a.awakeUntil) {
+		return false
+	}
+	return !a.cfg.WorkingHours.On(now)
+}
+
+// hoursChange is when off hours start or end next (zero: never); a.mu held.
+func (a *App) hoursChange() time.Time {
+	now := time.Now()
+	next := a.cfg.WorkingHours.Next(now)
+	if now.Before(a.awakeUntil) && (next.IsZero() || a.awakeUntil.Before(next) || !a.cfg.WorkingHours.On(now)) {
+		return a.awakeUntil
+	}
+	return next
+}
+
+// setAwake: "Work now" for d (0 = back to working hours).
+func (a *App) setAwake(d time.Duration) {
+	a.mu.Lock()
+	a.awakeUntil = time.Time{}
+	if d > 0 {
+		a.awakeUntil = time.Now().Add(d)
+	}
+	a.mu.Unlock()
+	a.logger.Printf("working hours: awake until %s", a.awakeUntil.Format("15:04"))
+	a.setIcon()
+	a.requestRedraw()
+	if d > 0 {
+		a.requestPoll()
+	}
 }
 
 func (a *App) runDoctor() { a.doctorNow(false) }
@@ -377,15 +431,20 @@ func (a *App) flashLoop() {
 		st, _ := a.store.Read()
 		a.mu.Lock()
 		was := a.animating || a.asking
-		a.animating = a.shouldFlash(st)
-		a.asking = !a.animating && a.shouldAsk(st)
+		off := a.offHoursLocked()
+		a.animating = !off && a.shouldFlash(st)
+		a.asking = !off && !a.animating && a.shouldAsk(st)
 		if a.animating || a.asking {
 			a.frame++
 		}
-		redraw := a.animating || a.asking || was
+		turned := off != a.sleeping
+		redraw := a.animating || a.asking || was || turned
 		a.mu.Unlock()
 		if redraw {
 			a.setIcon()
+		}
+		if turned {
+			a.requestRedraw()
 		}
 	}
 }
@@ -505,7 +564,12 @@ func ref(j state.Job) string {
 func (a *App) setIcon() {
 	st, _ := a.store.Read()
 	a.mu.Lock()
-	s := IconState{Template: runtime.GOOS == "darwin", Badge: runtime.GOOS != "darwin", Flash: a.animating, Ask: a.asking, Frame: a.frame}
+	a.sleeping = a.offHoursLocked()
+	s := IconState{Template: runtime.GOOS == "darwin", Badge: runtime.GOOS != "darwin", Flash: a.animating, Ask: a.asking, Frame: a.frame, Sleep: a.sleeping}
+	hours := ""
+	if a.sleeping {
+		hours = a.cfg.WorkingHours.From
+	}
 	if a.snap != nil {
 		active, _ := split(a.snap, st)
 		s.Queued = len(active.Entries)
@@ -541,8 +605,13 @@ func (a *App) setIcon() {
 	if s.Running {
 		tip += ", review in progress"
 	}
+	if s.Sleep {
+		tip = "Juhas — off hours, back at " + hours + " (" + fmt.Sprint(s.Queued) + " waiting)"
+	}
 	systray.SetTooltip(tip)
-	if runtime.GOOS == "darwin" {
+	if runtime.GOOS == "darwin" && s.Sleep {
+		systray.SetTitle("") // nothing calls for attention off hours
+	} else if runtime.GOOS == "darwin" {
 		title := ""
 		if s.Queued > 0 {
 			title = fmt.Sprint(s.Queued)
@@ -579,7 +648,7 @@ func (a *App) rebuild() {
 	lim := a.limits.get()
 	a.mu.Lock()
 	snap, rep, cfg, polling, lastErr, runner := a.snap, a.report, a.cfg, a.polling, a.lastErr, a.runner
-	sig := menuSignature(snap, st, rep, polling, lastErr, runner) + fmt.Sprintf("|upd:%s:%v|lim:%s", u.Latest, u.Installing, lim.text)
+	sig := menuSignature(snap, st, rep, polling, lastErr, runner) + fmt.Sprintf("|upd:%s:%v|lim:%s|off:%v:%s", u.Latest, u.Installing, lim.text, a.offHoursLocked(), a.awakeUntil)
 	if sig == a.menuSig {
 		a.mu.Unlock()
 		return // unchanged: do not close a menu the user may have open
@@ -602,6 +671,7 @@ func (a *App) rebuild() {
 		}
 	}
 	systray.AddMenuItem(head, "").Disable()
+	a.addHours(cfg)
 	switch {
 	case u.Installing:
 		systray.AddMenuItem("⬆ Installing "+u.Latest+" (waits for running reviews)…", "").Disable()
@@ -765,6 +835,23 @@ func (a *App) addRepo(r queue.RepoStat, entries []queue.Entry, st *state.State, 
 		item(all, "📌 Unpin (show only when something is for me)", func() { a.setPinned(key, false) })
 	} else {
 		item(all, "📌 Pin (always show, with all its PR/MRs)", func() { a.setPinned(key, true) })
+	}
+}
+
+// addHours is the working-hours line: off hours with "Work now", or the
+// overtime with a way back.
+func (a *App) addHours(cfg *config.Config) {
+	a.mu.Lock()
+	off, awake := a.offHoursLocked(), a.awakeUntil
+	a.mu.Unlock()
+	wh := cfg.WorkingHours
+	switch {
+	case !wh.Enabled:
+	case off:
+		systray.AddMenuItem("🛏 Off hours ("+wh.Label()+") — no checks or notifications", "").Disable()
+		item(nil, "☀️ Work now for 1 hour", func() { a.setAwake(time.Hour) })
+	case time.Now().Before(awake) && !wh.On(time.Now()):
+		item(nil, "☀️ Working overtime until "+awake.Format("15:04")+" — 🛏 stop now", func() { a.setAwake(0) })
 	}
 }
 

@@ -91,6 +91,14 @@ type panelOpen struct {
 	Clone  bool   `json:"clone"` // the repo has a local clone: it can be reviewed
 }
 
+// panelHours is the working-hours state.
+type panelHours struct {
+	Label  string `json:"label"`  // "08:00–16:00 Mon–Fri"
+	Off    bool   `json:"off"`    // off hours now: no checks or notifications
+	Awake  string `json:"awake"`  // "Work now" until HH:MM (outside the hours)
+	Change string `json:"change"` // when it switches next, HH:MM or "Mon 08:00"
+}
+
 // panelProject is a project one can pin.
 type panelProject struct {
 	Key    string `json:"key"`
@@ -127,6 +135,7 @@ type panelModel struct {
 	ScreenEffect bool           `json:"screen_effect"`
 	Autostart    bool           `json:"autostart"`
 	Update       updateInfo     `json:"update"`
+	Hours        *panelHours    `json:"hours,omitempty"` // set when working hours are on
 	Repos        []panelRepo    `json:"repos"`
 	History      []panelHistory `json:"history"`
 }
@@ -141,7 +150,23 @@ func (a *App) PanelModel() any {
 	snap, rep, cfg, polling, runner := a.snap, a.report, a.cfg, a.polling, a.runner
 	a.mu.Unlock()
 
-	m := panelModel{Polling: polling, ScreenEffect: cfg.ScreenEffectOn(), Autostart: platform.AutostartEnabled(), Concurrency: cfg.Concurrency, Errors: []string{}, Update: a.updateInfo()}
+	var hours *panelHours
+	a.mu.Lock()
+	if wh := cfg.WorkingHours; wh.Enabled {
+		now := time.Now()
+		hours = &panelHours{Label: wh.Label(), Off: a.offHoursLocked()}
+		if now.Before(a.awakeUntil) && !wh.On(now) {
+			hours.Awake = a.awakeUntil.Format("15:04")
+		}
+		if next := a.hoursChange(); !next.IsZero() {
+			hours.Change = next.Format("15:04")
+			if next.YearDay() != now.YearDay() {
+				hours.Change = next.Format("Mon 15:04")
+			}
+		}
+	}
+	a.mu.Unlock()
+	m := panelModel{Hours: hours, Polling: polling, ScreenEffect: cfg.ScreenEffectOn(), Autostart: platform.AutostartEnabled(), Concurrency: cfg.Concurrency, Errors: []string{}, Update: a.updateInfo()}
 	if runner != nil {
 		run, wait := runner.Queue()
 		m.Running, m.Waiting = len(run), len(wait)
@@ -343,6 +368,10 @@ func (a *App) PanelDo(action, url, agent string, on bool) error {
 		a.saveMapping(e.Repo, e.PathGuess)
 	case "poll":
 		a.requestManualPoll()
+	case "wake":
+		a.setAwake(time.Hour)
+	case "sleep":
+		a.setAwake(0)
 	case "pin", "unpin":
 		key, err := projectKey(url)
 		if err != nil {

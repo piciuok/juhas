@@ -13,6 +13,7 @@ comments; you accept, edit or reject each one, and Juhas publishes the accepted 
 
 - **Counters** — what waits for you, how many PR/MRs are open per repo, files changed (`+new ~modified −deleted`),
   each author with a colour badge, and *Show all PR/MRs* for the whole list of a repo.
+- **Working hours** — e.g. 8–16 on weekdays; outside them no checks or notifications, and the magnifier sleeps in bed.
 - **📌 Pinned projects** stay on the list with all their PR/MRs even when nobody asks you to review —
   folded under *Show all* or listed inline.
 - **Urgent items** assigned to you turn the icon into a **sparking lightning bolt** until you acknowledge them.

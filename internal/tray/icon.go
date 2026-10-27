@@ -20,6 +20,7 @@ type IconState struct {
 	Frame    int  // animation frame while Flash (sparks move, bolt pulses)
 	Template bool // macOS template image: black + alpha, no badge digits
 	Badge    bool // draw the count in a badge (Linux, where titles are unreliable)
+	Sleep    bool // off hours: the magnifier sleeps in bed, nothing else shows
 }
 
 const iconPx = 32
@@ -112,6 +113,9 @@ func render(layers []layer) []byte {
 // Render draws the icon: a magnifier (review), plus a status mark; while an
 // urgent item waits it becomes a lightning bolt throwing sparks.
 func Render(s IconState) []byte {
+	if s.Sleep {
+		return render(sleeping(s))
+	}
 	if s.Flash {
 		return render(zap(s))
 	}
@@ -292,4 +296,24 @@ func askBadge(s IconState) []layer {
 		{arc(cx, cy-0.07, 0.09, 0.06, -math.Pi, math.Pi/2), fg},
 		{segment(cx, cy+0.02, cx, cy+0.07, 0.06), fg},
 		{disc(cx, cy+0.155, 0.035), fg}}
+}
+
+// sleeping is the off-hours icon: the magnifier lying in a bed, tucked in
+// up to the lens, with a "z" above it.
+func sleeping(s IconState) []layer {
+	c := gray
+	if s.Template {
+		c = black
+	}
+	return []layer{
+		{segment(0.08, 0.40, 0.08, 0.92, 0.09), c}, // headboard
+		{segment(0.08, 0.80, 0.94, 0.80, 0.08), c}, // frame
+		{segment(0.92, 0.66, 0.92, 0.92, 0.08), c}, // footboard
+		{ring(0.25, 0.56, 0.125, 0.07), c},         // the lens on the pillow
+		{segment(0.34, 0.65, 0.46, 0.66, 0.09), c}, // its handle, going under the blanket
+		{rect(0.44, 0.56, 0.48, 0.20), c},          // the blanket over the handle
+		{segment(0.58, 0.10, 0.80, 0.10, 0.06), c}, // z
+		{segment(0.80, 0.10, 0.58, 0.34, 0.06), c},
+		{segment(0.58, 0.34, 0.80, 0.34, 0.06), c},
+	}
 }
