@@ -22,6 +22,8 @@ env:
 
 jobs:
   test:
+    # only the owner releases, even if collaborators get write access later
+    if: github.actor == github.repository_owner
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
