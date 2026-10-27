@@ -123,6 +123,11 @@ are added to `repos` and moved ones get their new path. Settings has a folder pi
 - `open` — every open PR/MR of the repo except yours, those by `ignore_authors` (bots by default) and those
   you already approved. Handy when a team never assigns reviewers; `juhas doctor` points such repos out.
 
+**📌 Pinned** (`pinned: true`, or *📌 Pin* in the menu and the Panel) keeps a repo on the list with all its open
+PR/MRs even when none waits for you. What you are asked about shows as usual. The rest is folded under
+*Show all*, or listed right in the menu with `show_all: "inline"`. Unlike `open` mode, the rest is not queued
+and Juhas does not ask about it; you can still review one from the Panel.
+
 **Urgent** (`urgent`): assigned to you or requesting your review, and carrying one of `labels`, waiting
 longer than `older_than`, or targeting one of `target_branches` (e.g. `release/*`).
 
@@ -166,6 +171,7 @@ that edits `~/.config/juhas/config.json` — the same path on macOS and Linux. R
   "claude": { "bin": "claude", "model": "opus", "effort": "high" },
   "codex":  { "bin": "codex",  "model": "",     "effort": "high" },
   "updates": { "check": true, "interval": "24h" },
+  "working_hours": { "enabled": true, "from": "08:00", "to": "16:00" },  // Mon–Fri unless "days"
   "defaults": {
     "agent": "claude",                          // default AI: claude | codex
     "on_new": "ask",                            // ask | auto | silent | off
@@ -174,6 +180,7 @@ that edits `~/.config/juhas/config.json` — the same path on macOS and Linux. R
   },
   "repos": {
     "gitlab.example.com/team/app": { "path": "~/Projects/app", "mode": "open", "language": { "comments": "de" } },
+    "gitlab.example.com/team/web": { "pinned": true, "show_all": "inline" },
     "github.com/acme/widgets":     "~/Projects/widgets"
   }
 }
@@ -283,7 +290,13 @@ Both work. Claude Code can run a repo's review skill with its own tooling; Codex
 Pick a default in Settings and switch per PR/MR in the "Run AI review?" dialog.
 
 **Our team never assigns reviewers on GitLab, so nothing shows up.**
-Set `"mode": "open"` for that repo: you will see every open MR except yours, the bots' and those you already approved.
+Pin the project (*📌 Pin a project…* in the menu): it stays on the list with all its open MRs, folded under
+*Show all*, and you can review any of them from the Panel. To be asked about every new MR as if it were assigned
+to you, set `"mode": "open"`: every open MR except yours, the bots' and those you already approved.
+
+**Can Juhas leave me alone after work?**
+Yes, with `working_hours` (Settings → General): outside them there are no automatic checks and no notifications,
+and the magnifier sleeps in bed. *☀️ Work now* wakes it for an hour.
 
 **Can the brief be in my language and the comments in English?**
 Yes: `language.brief` and `language.comments`, globally or per repo.

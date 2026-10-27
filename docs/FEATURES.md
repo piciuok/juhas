@@ -140,6 +140,9 @@ configuration reference.
   - acknowledge urgent items;
   - map a clone for a repo without one;
   - un-skip;
+  - pin a project (search your projects or paste a URL), fold or list a repo's other PR/MRs, and review one
+    of them although nobody asked you;
+  - *☀️ Work now* outside working hours;
   - preview the kick;
   - update.
 
