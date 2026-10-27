@@ -11,15 +11,18 @@ waiting for your review. On demand it prepares a **code-review brief** with Clau
 using the repo's own review skill when it has one — in **read-only mode**. The agent only *proposes*
 comments; you accept, edit or reject each one, and Juhas publishes the accepted ones from your account.
 
-- **Counters** — what waits for you, how many PR/MRs are open per repo, files changed (`+new ~modified −deleted`).
+- **Counters** — what waits for you, how many PR/MRs are open per repo, files changed (`+new ~modified −deleted`),
+  each author with a colour badge, and *Show all PR/MRs* for the whole list of a repo.
 - **Urgent items** assigned to you turn the icon into a **sparking lightning bolt** until you acknowledge them.
   A new urgent one also gets you a **kick**: an on-screen discharge (macOS) and a loud notification.
 - **New PR/MR** → "Run AI review?" with a choice of **Claude / Codex**, *Later* or *Skip*.
 - **Human in the loop** — a blinking, sparking **❓** next to the icon reminds you of proposals awaiting your decision;
   each comment can show its file's diff or the whole file, with the line highlighted, right on the proposal page.
+  Publish the accepted comments alone, or with an **approve** or **request changes**.
 - **Read-only guard** — reviews may read anything (gh/glab, Jira or docs through MCP) but not push, comment or edit;
   tune it with exceptions or turn it off per repo.
 - **Live run log**, briefs as Markdown files, and a browser **Panel** that stays open while you click.
+- **Plan limits** — how much of the Claude and Codex 5-hour and weekly windows is used, in one line of the menu.
 - **Several accounts** — work and personal GitHub logins (and GitLab ones) side by side, each acting as itself.
 - **Settings UI** over a plain JSON file: global defaults, per-repo overrides, folder picker, repo auto-mapping.
 - **Diagnostics** for every CLI it needs (versions, logins), with copy-paste fixes.
@@ -218,8 +221,9 @@ Worth knowing:
 
 The tray checks [GitHub releases](https://github.com/piciuok/juhas/releases) once a day (`updates.interval`).
 When a newer version is out you get a notification and an *⬆ Update to vX.Y.Z* item at the top of the menu
-and in the Panel. Installing downloads the archive for your OS/arch, verifies it against `checksums.txt`,
-swaps the binary atomically and restarts Juhas in place. It waits until no review is running.
+and in the Panel; *🔍 Check for updates* answers in a dialog. Installing downloads the archive for your OS/arch,
+verifies it against `checksums.txt`, swaps the binary atomically and starts the new version (through launchd
+when Juhas runs as the LaunchAgent), which then confirms the update. It waits until no review is running.
 
 ```jsonc
 "updates": {
@@ -237,22 +241,28 @@ the latest release. `JUHAS_UPDATE_API` points the check at a mirror of the GitHu
 ## Commands
 
 ```
-juhas [tray]                          tray icon (default)
+juhas [tray] [--foreground]           tray icon (default); from a terminal it starts in the background
+                                      and gives the shell back, --foreground keeps it attached
+juhas panel                           open the Panel of the running tray
 juhas poll [--dry-run] [--json]       check the queue once
-juhas review [--agent codex] <url>    review one PR/MR with live progress in the terminal
+juhas review [--agent claude|codex] <url>
+                                      review one PR/MR with live progress in the terminal
 juhas doctor [--with-ai]              diagnostics (--with-ai: a tiny real call to claude and codex)
-juhas update [--check] [--force]      update to the latest release
+juhas update [--check] [--pre] [--force]
+                                      update to the latest release
 juhas config init|scan|show|ui|path
-juhas install | uninstall | version
+juhas guard '<command>'               what the read-only guard would do with a command
+juhas install | uninstall | zap | version
 ```
 
-State and logs live in `~/.local/state/juhas/` (`poll.log`, `state.json`, `jobs/*.log`).
+State and logs live in `~/.local/state/juhas/` (`poll.log`, `state.json`, `jobs/*.log`, `tray.err.log`).
 
 ## Q&A
 
 **Does the AI post anything to my PR/MR?**
 No. Agents run read-only by default: Claude has a guard hook and its edit tools are disabled, and Codex runs in an
-OS sandbox without network. Only you publish, from the proposal page, and only the comments you accepted.
+OS sandbox without network. Only you publish, from the proposal page, and only the comments you accepted —
+with an approve or a change request only when you pick one.
 If you trust your agent more, `review.guard: "off"` (globally or per repo) lifts the restrictions.
 
 **Which agent should I pick?**
@@ -267,6 +277,10 @@ Yes: `language.brief` and `language.comments`, globally or per repo.
 
 **The tray icon is missing on GNOME.**
 Install and enable the AppIndicator extension; `juhas doctor` checks for a StatusNotifier host.
+
+**I started `juhas` in a terminal and see no icon.**
+It runs in the background; check `juhas panel` or `~/.local/state/juhas/tray.err.log`. On macOS a menu bar that is
+full (or hidden by the notch) can hide the icon.
 
 **What does it cost?**
 Juhas is free. Reviews use your Claude or Codex subscription or API usage, and nothing runs without your click

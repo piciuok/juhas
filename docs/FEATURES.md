@@ -121,6 +121,8 @@ configuration reference.
     author with a colour badge derived from the username (also in the Panel);
   - *Show all PR/MRs (n)* at the end of each repo: every open PR/MR of the repo, the ones waiting for you
     marked with •;
+  - *📊 Limits used*: one line with the Claude and Codex 5-hour and weekly usage (reset times on hover).
+    Claude's comes from its reviews, Codex's from its own session files;
   - per-item actions: review with Claude or Codex, cancel, skip, open the brief, open the PR/MR;
   - *Check now*, Diagnostics, Settings, the briefs folder, Start at login, the on-screen kick toggle, and
     *Check for updates*.
@@ -157,10 +159,12 @@ configuration reference.
 ## Updates
 
 - **Daily checks** of GitHub releases (`updates.interval`), with a notification and an *⬆ Update* menu item.
+  *🔍 Check for updates* answers in a dialog, so the result shows even when notifications are muted.
 - **One-click install:**
   1. downloads the archive for your OS and architecture and verifies its SHA-256;
   2. swaps the binary atomically (fsynced);
-  3. restarts Juhas in place.
+  3. starts the new version as a fresh process (through launchd under the LaunchAgent), which then confirms
+     the update in a dialog.
 
   First it pauses new reviews and waits for running ones and open questions.
 - **Options:** `prerelease` (semver ordering: rc.9 < rc.10) and `auto_install`. `juhas update [--check] [--pre] [--force]` does the same from a shell.
