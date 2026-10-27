@@ -5,9 +5,12 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/piciuok/juhas/internal/effects"
+	"github.com/piciuok/juhas/internal/limits"
 	"github.com/piciuok/juhas/internal/platform"
+	"github.com/piciuok/juhas/internal/state"
 )
 
 const usage = `juhas — PR/MRs to review + AI review (macOS, Linux)
@@ -36,6 +39,7 @@ var version = "dev"
 
 func main() {
 	platform.EnsurePath()
+	limits.ClaudePath = filepath.Join(filepath.Dir(state.Open().Path()), "limits-claude.json")
 	args := os.Args[1:]
 	cmd := "tray"
 	if len(args) > 0 {

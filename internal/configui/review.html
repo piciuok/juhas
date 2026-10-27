@@ -65,8 +65,8 @@ footer select { font: inherit; font-size: 13px; padding: 4px 8px; border-radius:
 <body>
 <header>
   <h1 id="title">Review proposal</h1>
-  <button id="acceptAll">Accept all</button>
-  <button id="rejectAll">Reject all</button>
+  <button id="acceptAll">✓ Accept all</button>
+  <button id="rejectAll">✕ Reject all</button>
 </header>
 <main>
   <div id="banners"></div>
@@ -81,7 +81,7 @@ footer select { font: inherit; font-size: 13px; padding: 4px 8px; border-radius:
     <option value="approve">✓ Approve</option>
     <option value="request_changes">✕ Request changes</option>
   </select>
-  <button class="primary" id="publish" disabled>Publish accepted</button>
+  <button class="primary" id="publish" disabled>🚀 Publish accepted</button>
 </footer>
 <script>
 "use strict";
@@ -135,7 +135,7 @@ function counts() {
   const ev = $("#event").value;
   $("#publish").disabled = acc === 0 && ev === "comment";
   const what = { comment: "", approve: " + approve", request_changes: " + request changes" }[ev];
-  $("#publish").textContent = acc ? `Publish accepted (${acc})${what}` : ev === "approve" ? "Approve" : `Publish accepted${what}`;
+  $("#publish").textContent = acc ? `🚀 Publish accepted (${acc})${what}` : ev === "approve" ? "✓ Approve" : `🚀 Publish accepted${what}`;
 }
 
 // File preview: the diff of the file a comment is about, or the whole file at
@@ -207,7 +207,7 @@ function card(c) {
       c.severity ? h("span", { class: "sev " + c.severity }, c.severity) : null,
       h("span", { class: "sev" }, LABEL[c.status] || c.status),
       h("span", { class: "spacer" }),
-      c.file ? h("button", { title: "Show the file next to the comment", class: views[c.id] ? "on" : "", onclick: () => { views[c.id] = views[c.id] ? null : "diff"; render(); } }, views[c.id] ? "Hide file" : "📄 File") : null,
+      c.file ? h("button", { title: "Show the file next to the comment", class: views[c.id] ? "on" : "", onclick: () => { views[c.id] = views[c.id] ? null : "diff"; render(); } }, views[c.id] ? "✕ Hide file" : "📄 File") : null,
       posted ? null : h("button", { class: "ok" + (c.status === "accepted" ? " on" : ""), onclick: () => set("accepted") }, "✓ Accept"),
       posted ? null : h("button", { class: "no" + (c.status === "rejected" ? " on" : ""), onclick: () => set("rejected") }, "✕ Reject")),
     c.file && views[c.id] ? preview(c) : null,

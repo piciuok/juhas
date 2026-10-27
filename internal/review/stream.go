@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/piciuok/juhas/internal/limits"
 )
 
 // streamEvent is the subset of `claude -p --output-format stream-json
@@ -32,6 +34,8 @@ type streamEvent struct {
 	DurationMS int64   `json:"duration_ms"`
 	CostUSD    float64 `json:"total_cost_usd"`
 	Model      string  `json:"model"`
+	// rate_limit_event: plan usage, kept for the tray's limits line
+	RateLimitInfo json.RawMessage `json:"rate_limit_info"`
 }
 
 // StreamResult is what the final "result" event said.
@@ -70,6 +74,8 @@ func consumeStream(r io.Reader, log io.Writer, onEvent func(result bool)) Stream
 			ind = "    │ " // inside a subagent
 		}
 		switch ev.Type {
+		case "rate_limit_event":
+			limits.SaveClaude(ev.RateLimitInfo)
 		case "system":
 			if ev.Subtype == "init" {
 				fmt.Fprintf(log, "%s ● Claude session started%s\n", stamp(), optional(" (model "+ev.Model+")", ev.Model != ""))

@@ -99,10 +99,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   <h1>Juhas · Settings</h1>
   <div class="path" id="path"></div>
   <span id="status"></span>
-  <button id="btnReload" title="Reload from disk">Reload</button>
-  <button id="btnSave" class="primary" disabled>Save</button>
+  <button id="btnReload" title="Reload from disk">↻ Reload</button>
+  <button id="btnSave" class="primary" disabled>💾 Save</button>
   <button id="btnDoctor" title="CLI (gh, glab, claude, codex), login, repos">🩺 Diagnostics</button>
-  <button id="btnClose" title="End the editing session">Close</button>
+  <button id="btnClose" title="End the editing session">✕ Close</button>
 </header>
 <div class="layout">
   <nav id="nav"></nav>
@@ -114,7 +114,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 <div id="picker"><div class="box">
   <div class="top"><div class="crumbs" id="pkCrumbs"></div><label class="muted" style="font-size:12px"><input type="checkbox" id="pkHidden"> hidden</label></div>
   <ul id="pkList"></ul>
-  <div class="bottom"><span class="hint" id="pkHint"></span><button id="pkCancel">Cancel</button><button class="primary" id="pkOk">Choose this folder</button></div>
+  <div class="bottom"><span class="hint" id="pkHint"></span><button id="pkCancel">✕ Cancel</button><button class="primary" id="pkOk">📁 Choose this folder</button></div>
 </div></div>
 <script>
 "use strict";

@@ -43,8 +43,8 @@ section h2 + .row { border-top: 0; }
   <h1>🩺 Diagnostics</h1>
   <span class="sum" id="sum">checking…</span>
   <label class="only"><input type="checkbox" id="onlyBad"> problems only</label>
-  <button id="btnRun" class="primary">Run again</button>
-  <button id="btnAI" title="Sends a short prompt to Claude and Codex — costs a few tokens">Check with an AI call</button>
+  <button id="btnRun" class="primary">🔄 Run again</button>
+  <button id="btnAI" title="Sends a short prompt to Claude and Codex — costs a few tokens">🤖 Check with an AI call</button>
 </header>
 <main>
   <div id="banner"></div>
@@ -112,7 +112,7 @@ function render() {
         h("span", { class: "lv l" + c.level }, SYM[c.level]),
         h("span", { class: "msg" }, c.msg),
         c.hint ? h("div", { class: "hint" }, hintParts(c.hint).map((p) => looksLikeCommand(p)
-          ? [h("code", {}, p), h("button", { onclick: (e) => copy(p, e.target) }, "copy")]
+          ? [h("code", {}, p), h("button", { onclick: (e) => copy(p, e.target) }, "📋 copy")]
           : h("span", { class: "msg" }, "→ " + p))) : null)));
   }).filter(Boolean));
   if (only && !$("#list").children.length) $("#list").append(h("p", {}, "✓ No problems."));

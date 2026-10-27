@@ -87,11 +87,11 @@ section.history h2 + .hrow { border-top: none; }
   <div class="stats" id="stats"></div>
   <span class="spacer"></span>
   <label class="toggle" title="New urgent PR/MR: lightning on screen and a loud notification"><input type="checkbox" id="tgZap"> ⚡ kick</label>
-  <button id="btnZap" title="Show the effect">test</button>
+  <button id="btnZap" title="Show the effect">⚡ test</button>
   <label class="toggle"><input type="checkbox" id="tgAuto"> start at login</label>
-  <button id="btnPoll" title="Manual check: also asks about PR/MRs you skipped (same head)">Check now</button>
-  <button id="btnBriefs">Briefs</button>
-  <button id="btnSettings">Settings</button>
+  <button id="btnPoll" title="Manual check: also asks about PR/MRs you skipped (same head)">🔄 Check now</button>
+  <button id="btnBriefs">📁 Briefs</button>
+  <button id="btnSettings">⚙️ Settings</button>
   <button id="btnDoctor" title="CLI (gh, glab, claude, codex), login, repos">🩺 Diagnostics</button>
 </header>
 <main>
@@ -159,27 +159,27 @@ function entryRow(e) {
   const actions = [];
   if (e.busy) {
     actions.push(h("a", { class: "btn", href: logURL, target: "_blank" }, "👁 Live view"));
-    actions.push(h("button", { onclick: () => act("cancel", { url: e.url }) }, "Cancel"));
+    actions.push(h("button", { onclick: () => act("cancel", { url: e.url }) }, "⏹ Cancel"));
   } else {
     e.agents.forEach((a, i) => {
       const again = e.status === "done" || e.status === "failed";
       actions.push(h("button", { class: i === 0 ? "primary" : "", title: a.method,
         onclick: (ev) => { ev.target.disabled = true; act("analyze", { url: e.url, agent: a.name }); } },
-        (i === 0 ? (e.stale ? "⟳ Review the new commits" : again ? "▶ Review again" : "▶ Review") : "with") + " " + a.label));
+        (i === 0 ? (e.stale ? "⟳ Review the new commits" : again ? "▶ Review again" : "▶ Review") : "▷ with") + " " + a.label));
     });
-    if (logURL) actions.push(h("a", { class: "btn", href: logURL, target: "_blank" }, "Run log"));
+    if (logURL) actions.push(h("a", { class: "btn", href: logURL, target: "_blank" }, "📜 Run log"));
   }
   if (e.proposal && e.log_id) {
     const p = e.proposal;
     const label = p.pending ? `📝 Proposal (${p.pending} awaiting decision)` : p.posted ? `📝 Published ${p.posted}/${p.total}` : `📝 Proposal (${p.accepted} ✓)`;
     actions.push(h("a", { class: "btn" + (p.pending ? " primary" : ""), href: `/review?t=${T}&job=${e.log_id}`, target: "_blank", style: p.pending ? "color:#fff" : null }, label));
   }
-  if (e.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: e.url }) }, e.stale ? "Brief ⟳" : "Brief"));
-  if (e.guess) actions.push(h("button", { title: e.guess, onclick: () => act("map", { url: e.url }) }, "Map clone"));
+  if (e.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: e.url }) }, e.stale ? "📄 Brief ⟳" : "📄 Brief"));
+  if (e.guess) actions.push(h("button", { title: e.guess, onclick: () => act("map", { url: e.url }) }, "🔗 Map clone"));
   if (e.urgent && !e.acked) actions.push(h("button", { class: "volt", onclick: () => act("ack", { url: e.url }) }, "🔕 OK"));
   if (!e.busy) actions.push(e.status === "skipped"
-    ? h("button", { onclick: () => act("unskip", { url: e.url }) }, "Restore")
-    : h("button", { title: "Don't ask again until there are new commits", onclick: () => act("skip", { url: e.url }) }, "Skip"));
+    ? h("button", { onclick: () => act("unskip", { url: e.url }) }, "↩ Restore")
+    : h("button", { title: "Don't ask again until there are new commits", onclick: () => act("skip", { url: e.url }) }, "🔕 Skip"));
 
   const who = [e.requested && "reviewer", e.assigned && "assignee"].filter(Boolean).join(", ");
   return h("div", { class: "row" + (e.urgent ? " urgent" : "") + (e.status === "skipped" ? " skipped" : "") },
@@ -265,8 +265,8 @@ function renderHistory(m) {
       const actions = [];
       if (x.proposal && x.log_id) actions.push(h("a", { class: "btn", href: `/review?t=${T}&job=${x.log_id}`, target: "_blank" },
         x.proposal.posted ? `📝 published ${x.proposal.posted}/${x.proposal.total}` : `📝 proposal (${x.proposal.pending} awaiting decision)`));
-      if (x.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: x.url }) }, "Brief"));
-      if (x.log_id) actions.push(h("a", { class: "btn", href: `/log?t=${T}&job=${x.log_id}`, target: "_blank" }, "Run log"));
+      if (x.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: x.url }) }, "📄 Brief"));
+      if (x.log_id) actions.push(h("a", { class: "btn", href: `/log?t=${T}&job=${x.log_id}`, target: "_blank" }, "📜 Run log"));
       return h("div", { class: "hrow" },
         h("span", { class: "when" }, x.when),
         h("div", { class: "title" },

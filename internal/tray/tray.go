@@ -27,6 +27,7 @@ import (
 	"github.com/piciuok/juhas/internal/doctor"
 	"github.com/piciuok/juhas/internal/effects"
 	"github.com/piciuok/juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/limits"
 	"github.com/piciuok/juhas/internal/platform"
 	"github.com/piciuok/juhas/internal/queue"
 	"github.com/piciuok/juhas/internal/review"
@@ -58,6 +59,7 @@ type App struct {
 	installing bool // an update is downloading or waiting for reviews to finish
 	frame      int
 	menuSig    string
+	limits     limitsLine // cached: Codex is read from its session files
 	ui         *configui.Server
 	uiURL      string
 
@@ -574,9 +576,10 @@ func (a *App) rebuild() {
 		st = &state.State{Jobs: map[string]*state.Job{}}
 	}
 	u := a.updateInfo()
+	lim := a.limits.get()
 	a.mu.Lock()
 	snap, rep, cfg, polling, lastErr, runner := a.snap, a.report, a.cfg, a.polling, a.lastErr, a.runner
-	sig := menuSignature(snap, st, rep, polling, lastErr, runner) + fmt.Sprintf("|upd:%s:%v", u.Latest, u.Installing)
+	sig := menuSignature(snap, st, rep, polling, lastErr, runner) + fmt.Sprintf("|upd:%s:%v|lim:%s", u.Latest, u.Installing, lim.text)
 	if sig == a.menuSig {
 		a.mu.Unlock()
 		return // unchanged: do not close a menu the user may have open
@@ -604,7 +607,7 @@ func (a *App) rebuild() {
 		systray.AddMenuItem("⬆ Installing "+u.Latest+" (waits for running reviews)…", "").Disable()
 	case u.Latest != "":
 		item(nil, fmt.Sprintf("⬆ Update to %s (you have %s)", u.Latest, u.Current), func() { go a.installUpdate() })
-		item(nil, "    What's new in "+u.Latest, func() { _ = platform.Open(u.URL) })
+		item(nil, "    📰 What's new in "+u.Latest, func() { _ = platform.Open(u.URL) })
 	}
 	item(nil, "🗂 Panel (stays open while you click)…", a.openPanel)
 
@@ -616,7 +619,7 @@ func (a *App) rebuild() {
 		for _, e := range snap.Errors {
 			m.AddSubMenuItem(trunc(e, 100), "").Disable()
 		}
-		item(m, "Show log", func() { _ = platform.Open(a.store.PollLog()) })
+		item(m, "📜 Show log", func() { _ = platform.Open(a.store.PollLog()) })
 	}
 	if rep != nil && rep.Worst() != doctor.OK {
 		label := fmt.Sprintf("⚠ Diagnostics: %d errors, %d warnings", rep.Count(doctor.Fail), rep.Count(doctor.Warn))
@@ -671,24 +674,24 @@ func (a *App) rebuild() {
 	}
 
 	systray.AddSeparator()
-	item(nil, "Check now (also re-asks skipped)", a.requestManualPoll)
-	item(nil, "Briefs folder", func() {
+	item(nil, "🔄 Check now (also re-asks skipped)", a.requestManualPoll)
+	item(nil, "📁 Briefs folder", func() {
 		d := config.Expand(cfg.BriefsDir)
 		_ = os.MkdirAll(d, 0o755)
 		_ = platform.Open(d)
 	})
-	item(nil, "Settings…", a.openSettings)
-	item(nil, "Config file (JSON)", func() { _ = platform.Open(a.cfgPath) })
+	item(nil, "⚙️ Settings…", a.openSettings)
+	item(nil, "🧾 Config file (JSON)", func() { _ = platform.Open(a.cfgPath) })
 	item(nil, "🩺 Diagnostics (CLI, login, repos)…", a.openDoctor)
-	item(nil, "Log", func() { _ = platform.Open(a.store.PollLog()) })
-	item(nil, "Check for updates ("+a.version+")", func() { go a.checkUpdate(true) })
+	item(nil, "📜 Log", func() { _ = platform.Open(a.store.PollLog()) })
+	item(nil, "🔍 Check for updates ("+a.version+")", func() { go a.checkUpdate(true) })
 	zap := systray.AddMenuItemCheckbox("⚡ On-screen kick for urgent items", "", cfg.ScreenEffectOn())
 	go func() {
 		for range zap.ClickedCh {
 			a.setScreenEffect(!cfg.ScreenEffectOn())
 		}
 	}()
-	auto := systray.AddMenuItemCheckbox("Start at login", "", platform.AutostartEnabled())
+	auto := systray.AddMenuItemCheckbox("🚀 Start at login", "", platform.AutostartEnabled())
 	go func() {
 		for range auto.ClickedCh {
 			if platform.AutostartEnabled() {
@@ -701,7 +704,11 @@ func (a *App) rebuild() {
 			a.requestRedraw()
 		}
 	}()
-	item(nil, "Quit", systray.Quit)
+	if lim.text != "" {
+		systray.AddSeparator()
+		systray.AddMenuItem(lim.text, lim.detail).Disable()
+	}
+	item(nil, "🚪 Quit", systray.Quit)
 }
 
 func (a *App) addRepo(r queue.RepoStat, entries []queue.Entry, st *state.State, cfg *config.Config, runner *review.Runner) {
@@ -709,7 +716,7 @@ func (a *App) addRepo(r queue.RepoStat, entries []queue.Entry, st *state.State, 
 	if r.Open >= 0 {
 		open = fmt.Sprintf("%d open · ", r.Open)
 	}
-	label := fmt.Sprintf("%s — %s%d for me", app.ShortRepo(r.Key), open, r.Queued)
+	label := fmt.Sprintf("📦 %s — %s%d for me", app.ShortRepo(r.Key), open, r.Queued)
 	if r.Urgent > 0 {
 		label += fmt.Sprintf(" · 🔴%d", r.Urgent)
 	}
@@ -722,14 +729,47 @@ func (a *App) addRepo(r queue.RepoStat, entries []queue.Entry, st *state.State, 
 		for _, e := range entries {
 			queued[e.URL] = true
 		}
-		all := systray.AddMenuItem(fmt.Sprintf("    Show all PR/MRs (%d)", len(r.All)), "Every open PR/MR of the repo")
+		all := systray.AddMenuItem(fmt.Sprintf("    📋 Show all PR/MRs (%d)", len(r.All)), "Every open PR/MR of the repo")
 		for _, o := range r.All {
 			url := o.URL
 			item(all, allLabel(o, queued[o.URL]), func() { _ = platform.Open(url) })
 		}
 		all.AddSeparator()
-		item(all, "Open the list in the browser", func() { _ = platform.Open(listURL(r.Key, entries)) })
+		item(all, "🌐 Open the list in the browser", func() { _ = platform.Open(listURL(r.Key, entries)) })
 	}
+}
+
+// limitsLine is the one-line plan usage of the agents, re-read at most
+// once a minute ("" until one has reported).
+type limitsLine struct {
+	mu           sync.Mutex
+	at           time.Time
+	text, detail string
+}
+
+func (l *limitsLine) get() limitsLine {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if time.Since(l.at) >= time.Minute {
+		now := time.Now()
+		var parts, details []string
+		for _, ag := range []struct {
+			name string
+			read func() (limits.Usage, bool)
+		}{{"Claude", limits.Claude}, {"Codex", limits.Codex}} {
+			if u, ok := ag.read(); ok {
+				if short := u.Short(now); short != "" {
+					parts = append(parts, ag.name+" "+short)
+					details = append(details, u.Detail(ag.name))
+				}
+			}
+		}
+		l.at, l.text, l.detail = now, "", strings.Join(details, "\n")
+		if len(parts) > 0 {
+			l.text = "📊 Limits used: " + strings.Join(parts, "   ·   ")
+		}
+	}
+	return limitsLine{text: l.text, detail: l.detail}
 }
 
 // allLabel is one line of "Show all": "• !883 title · 🟣 author", the dot
@@ -804,18 +844,18 @@ func (a *App) addEntry(e queue.Entry, j *state.Job, cfg *config.Config, runner *
 		logPath := j.Log
 		item(m, "📝 Proposed comments — "+pr.label()+"…", func() { a.openReview(logPath) })
 	}
-	item(m, "Open in browser", func() { _ = platform.Open(e.URL) })
+	item(m, "🌐 Open in browser", func() { _ = platform.Open(e.URL) })
 	s, _ := cfg.Effective(e.Repo)
 	method := review.ResolveFor(s.Agent, dir, s.Review)
 	switch {
 	case busy:
 		logPath := review.LogPath(a.store, e.URL)
 		item(m, "👁 Live view", func() { a.openLog(logPath) })
-		item(m, "Cancel review", func() { runner.Cancel(e.URL) })
+		item(m, "⏹ Cancel review", func() { runner.Cancel(e.URL) })
 	case dir == "":
-		m.AddSubMenuItem("No local clone — set path in config", "").Disable()
+		m.AddSubMenuItem("❓ No local clone — set path in config", "").Disable()
 	case method.Kind == review.KindNone:
-		m.AddSubMenuItem("No review skill (fallback = none)", "").Disable()
+		m.AddSubMenuItem("⚠ No review skill (fallback = none)", "").Disable()
 	default:
 		verb := "▶ Review"
 		if status == state.Done || status == state.Failed {
@@ -833,13 +873,13 @@ func (a *App) addEntry(e queue.Entry, j *state.Job, cfg *config.Config, runner *
 			m2 := review.ResolveFor(ag, dir, s.Review)
 			label := fmt.Sprintf("%s — %s (%s)", verb, config.AgentLabel(ag), m2)
 			if i > 0 {
-				label = fmt.Sprintf("    … or in %s (%s)", config.AgentLabel(ag), m2)
+				label = fmt.Sprintf("▷ … or in %s (%s)", config.AgentLabel(ag), m2)
 			}
 			item(m, label, func() { runner.Enqueue(e.Item, dir, ag) })
 		}
 	}
 	if j != nil && j.Brief != "" {
-		l := "Open brief"
+		l := "📄 Open brief"
 		if j.Stale(e.HeadSHA) {
 			l += " (new commits since the brief)"
 		}
@@ -847,18 +887,18 @@ func (a *App) addEntry(e queue.Entry, j *state.Job, cfg *config.Config, runner *
 		item(m, l, func() { _ = platform.Open(brief) })
 	}
 	if j != nil && j.Status == state.Failed {
-		m.AddSubMenuItem("Error: "+trunc(j.Error, 90), "").Disable()
+		m.AddSubMenuItem("❌ Error: "+trunc(j.Error, 90), "").Disable()
 	}
 	if j != nil && j.Log != "" && !busy { // busy entries got "Live view" above
 		logPath := j.Log
-		item(m, "Run log", func() { a.openLog(logPath) })
+		item(m, "📜 Run log", func() { a.openLog(logPath) })
 	}
 	if e.Path == "" && e.PathGuess != "" {
 		guess := e.PathGuess
-		item(m, "Save mapping → "+config.Contract(guess), func() { a.saveMapping(e.Repo, guess) })
+		item(m, "🔗 Save mapping → "+config.Contract(guess), func() { a.saveMapping(e.Repo, guess) })
 	}
 	if status != state.Skipped && !busy {
-		item(m, "Skip (don't ask until new commits)", func() {
+		item(m, "🔕 Skip (don't ask until new commits)", func() {
 			_ = a.store.Update(func(st *state.State) error {
 				jj := st.Job(e.URL)
 				if jj == nil {
@@ -872,7 +912,7 @@ func (a *App) addEntry(e queue.Entry, j *state.Job, cfg *config.Config, runner *
 		})
 	}
 	if e.Urgent {
-		m.AddSubMenuItem("Urgent: "+e.UrgentWhy, "").Disable()
+		m.AddSubMenuItem("🔴 Urgent: "+e.UrgentWhy, "").Disable()
 	}
 }
 
