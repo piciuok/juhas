@@ -34,8 +34,11 @@ func (f *fakeForge) Requested(context.Context) ([]forge.Item, error) {
 	return f.requested, f.err
 }
 func (f *fakeForge) Open(_ context.Context, p string) ([]forge.Item, error) { return f.open[p], nil }
-func (f *fakeForge) CountOpen(_ context.Context, p string) (int, error) {
-	return 42, nil
+func (f *fakeForge) ListOpen(_ context.Context, p string) ([]forge.Item, error) {
+	if p == "team/other" {
+		return []forge.Item{mr("gl.example/team/other", 1, nil), mr("gl.example/team/other", 2, nil)}, nil
+	}
+	return f.open[p], nil
 }
 func (f *fakeForge) Get(context.Context, string, int) (forge.Item, error) { return forge.Item{}, nil }
 
@@ -112,8 +115,11 @@ func TestCollect(t *testing.T) {
 	if s := stats[app]; s.Open != 6 || s.Queued != 2 || s.Urgent != 1 {
 		t.Errorf("app stat = %+v (open = all listed, queued = kept)", s)
 	}
-	if s := stats["gl.example/team/other"]; s.Open != 42 || s.Queued != 1 {
-		t.Errorf("other stat = %+v (open via CountOpen)", s)
+	if s := stats["gl.example/team/other"]; s.Open != 2 || s.Queued != 1 || len(s.All) != 2 {
+		t.Errorf("other stat = %+v (open via ListOpen)", s)
+	}
+	if s := stats[app]; len(s.All) != 6 || s.All[0].Number < s.All[1].Number {
+		t.Errorf("app: all open PR/MRs, newest first: %+v", s.All)
 	}
 	if _, ok := stats["gl.example/team/quiet"]; ok {
 		t.Error("on_new=off repo must not show up")

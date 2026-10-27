@@ -35,6 +35,28 @@ type RepoStat struct {
 	Open   int    `json:"open"`   // all open PR/MRs (-1 = not counted)
 	Queued int    `json:"queued"` // entries in the queue
 	Urgent int    `json:"urgent"`
+	// All open PR/MRs of the repo, newest first, for "Show all" (empty
+	// when not counted).
+	All []Open `json:"all,omitempty"`
+}
+
+// Open is one PR/MR in a repo's full list.
+type Open struct {
+	Number int    `json:"number"`
+	Ref    string `json:"ref"`
+	Title  string `json:"title"`
+	Author string `json:"author"`
+	URL    string `json:"url"`
+	Draft  bool   `json:"draft,omitempty"`
+}
+
+func openList(items []forge.Item) []Open {
+	out := make([]Open, 0, len(items))
+	for _, it := range items {
+		out = append(out, Open{Number: it.Number, Ref: it.Ref(), Title: it.Title, Author: it.Author, URL: it.URL, Draft: it.Draft})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Number > out[j].Number })
+	return out
 }
 
 type Snapshot struct {
@@ -159,7 +181,7 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 		}
 	}
 
-	openCount := map[string]int{}
+	openAll := map[string][]Open{}
 	for _, key := range c.Cfg.RepoKeys() {
 		s, err := c.Cfg.Effective(key)
 		if err != nil || s.Mode != config.ModeOpen || s.OnNew == config.OnNewOff {
@@ -182,7 +204,7 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 				continue
 			}
 		}
-		openCount[strings.ToLower(key)] = len(items)
+		openAll[strings.ToLower(key)] = openList(items)
 		for _, it := range items {
 			add(it)
 		}
@@ -195,8 +217,8 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 			return st
 		}
 		st := &RepoStat{Key: key, Mode: s.Mode, Open: -1}
-		if n, ok := openCount[lk]; ok {
-			st.Open = n
+		if all, ok := openAll[lk]; ok {
+			st.Open, st.All = len(all), all
 		}
 		stats[lk] = st
 		return st
@@ -247,8 +269,9 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 		if st.Open < 0 && s.CountOpen && st.Queued > 0 {
 			host, project := forge.SplitKey(st.Key)
 			if f, ok := c.ForRepo(host, s.Account); ok {
-				if n, err := f.CountOpen(ctx, project); err == nil {
-					st.Open = n
+				if items, err := f.ListOpen(ctx, project); err == nil {
+					st.All = openList(items)
+					st.Open = len(st.All)
 				} else {
 					snap.Errors = append(snap.Errors, err.Error())
 				}

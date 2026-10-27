@@ -251,12 +251,20 @@ func (g *GitLabForge) fillApprovals(ctx context.Context, items []Item, me string
 	return nil
 }
 
-func (g *GitLabForge) CountOpen(ctx context.Context, project string) (int, error) {
+func (g *GitLabForge) ListOpen(ctx context.Context, project string) ([]Item, error) {
+	me, err := g.Me(ctx)
+	if err != nil {
+		return nil, err
+	}
 	mrs, err := g.mrs(ctx, "projects/"+url.PathEscape(project)+"/merge_requests?state=opened")
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return len(mrs), nil
+	items := make([]Item, 0, len(mrs))
+	for _, mr := range mrs {
+		items = append(items, g.item(mr, me))
+	}
+	return items, nil
 }
 
 func (g *GitLabForge) item(mr glMR, me string) Item {

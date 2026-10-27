@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"os"
 	"os/signal"
@@ -716,6 +717,51 @@ func (a *App) addRepo(r queue.RepoStat, entries []queue.Entry, st *state.State, 
 	for _, e := range entries {
 		a.addEntry(e, st.Job(e.URL), cfg, runner)
 	}
+	if len(r.All) > 0 {
+		queued := map[string]bool{}
+		for _, e := range entries {
+			queued[e.URL] = true
+		}
+		all := systray.AddMenuItem(fmt.Sprintf("    Show all PR/MRs (%d)", len(r.All)), "Every open PR/MR of the repo")
+		for _, o := range r.All {
+			url := o.URL
+			item(all, allLabel(o, queued[o.URL]), func() { _ = platform.Open(url) })
+		}
+		all.AddSeparator()
+		item(all, "Open the list in the browser", func() { _ = platform.Open(listURL(r.Key, entries)) })
+	}
+}
+
+// allLabel is one line of "Show all": "• !883 title · 🟣 author", the dot
+// marking those waiting for me.
+func allLabel(o queue.Open, queued bool) string {
+	mark := "   "
+	if queued {
+		mark = "•  "
+	}
+	draft := ""
+	if o.Draft {
+		draft = "[draft] "
+	}
+	return fmt.Sprintf("%s%s %s%s%s", mark, o.Ref, draft, trunc(o.Title, 60), byAuthor(o.Author))
+}
+
+// authorBadges are the colours an author gets; red is left out, it marks urgent.
+var authorBadges = []string{"🟠", "🟡", "🟢", "🔵", "🟣", "🟤", "⚫", "🟧", "🟨", "🟩", "🟦", "🟪", "🟫"}
+
+// authorBadge is a colour derived from the username, the same on every poll.
+func authorBadge(user string) string {
+	h := fnv.New32a()
+	h.Write([]byte(strings.ToLower(user)))
+	return authorBadges[h.Sum32()%uint32(len(authorBadges))]
+}
+
+// byAuthor is the "  · 🟣 author" tail of a menu line ("" without one).
+func byAuthor(user string) string {
+	if user == "" {
+		return ""
+	}
+	return "  · " + authorBadge(user) + " " + user
 }
 
 // listURL is the repo's PR/MR list page.
@@ -942,6 +988,9 @@ func menuSignature(snap *queue.Snapshot, st *state.State, rep *doctor.Report, po
 		fmt.Fprintf(&b, "%s|%d|", snap.At.Format("15:04"), len(snap.Errors))
 		for _, r := range snap.Repos {
 			fmt.Fprintf(&b, "%s:%d:%d:%d|", r.Key, r.Open, r.Queued, r.Urgent)
+			for _, o := range r.All {
+				fmt.Fprintf(&b, "%s:%s:%s:%v|", o.URL, o.Title, o.Author, o.Draft)
+			}
 		}
 		for _, e := range snap.Entries {
 			fmt.Fprintf(&b, "%s:%s:%s:%v:%s:%v:%s|", e.URL, e.Title, e.HeadSHA, e.Urgent, e.PathGuess, runner != nil && runner.Busy(e.URL), e.Files.String())
@@ -956,7 +1005,7 @@ func menuSignature(snap *queue.Snapshot, st *state.State, rep *doctor.Report, po
 	return b.String()
 }
 
-// entryLabel is "    • !883 title…   +1 ~2 · author". The systray library
+// entryLabel is "    • !883 title…   +1 ~2 · 🟣 author". The systray library
 // has no right-aligned column or smaller font, so the counter closes the
 // label after a fixed-width title, which lines the counters up closely
 // enough, and the author follows it.
@@ -967,9 +1016,7 @@ func entryLabel(icon string, e queue.Entry) string {
 	if f := e.Files.String(); f != "" {
 		pad = strings.Repeat(" ", width-len(title)+2) + "  " + f
 	}
-	if e.Author != "" {
-		pad += "  · " + e.Author
-	}
+	pad += byAuthor(e.Author)
 	return fmt.Sprintf("    %s %s %s%s", icon, e.Ref(), string(title), pad)
 }
 

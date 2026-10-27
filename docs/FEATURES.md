@@ -117,7 +117,10 @@ configuration reference.
 ## Tray menu and Panel
 
 - **Tray menu** (macOS menu bar, Linux StatusNotifier tray):
-  - PR/MRs grouped by repo, with status icons (⏳ running, 📝 reviewed, ⟳ stale, ❌ failed, 🔕 skipped);
+  - PR/MRs grouped by repo, with status icons (⏳ running, 📝 reviewed, ⟳ stale, ❌ failed, 🔕 skipped) and the
+    author with a colour badge derived from the username (also in the Panel);
+  - *Show all PR/MRs (n)* at the end of each repo: every open PR/MR of the repo, the ones waiting for you
+    marked with •;
   - per-item actions: review with Claude or Codex, cancel, skip, open the brief, open the PR/MR;
   - *Check now*, Diagnostics, Settings, the briefs folder, Start at login, the on-screen kick toggle, and
     *Check for updates*.

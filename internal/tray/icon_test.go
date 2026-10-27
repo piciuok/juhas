@@ -41,3 +41,23 @@ func TestRenderDecodes(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthorBadge(t *testing.T) {
+	if authorBadge("JKowalski") != authorBadge("jkowalski") {
+		t.Error("the badge must not depend on case")
+	}
+	seen := map[string]bool{}
+	for _, u := range []string{"anowak", "jkowalski", "mwisniewski", "pzielinski", "kwojcik", "tlewandowski"} {
+		b := authorBadge(u)
+		if b == "🔴" {
+			t.Errorf("%s got red, which marks urgent", u)
+		}
+		seen[b] = true
+	}
+	if len(seen) < 3 {
+		t.Errorf("six authors share %d colours", len(seen))
+	}
+	if byAuthor("") != "" {
+		t.Error("no author, no tail")
+	}
+}

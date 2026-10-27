@@ -233,12 +233,8 @@ func (g *GitHubForge) Open(ctx context.Context, project string) ([]Item, error) 
 	return items, nil
 }
 
-func (g *GitHubForge) CountOpen(ctx context.Context, project string) (int, error) {
-	res, err := g.search(ctx, "is:pr is:open repo:"+project, 1, "")
-	if err != nil {
-		return 0, err
-	}
-	return res.Data.Search.IssueCount, nil
+func (g *GitHubForge) ListOpen(ctx context.Context, project string) ([]Item, error) {
+	return g.Open(ctx, project) // the search already has everything, no extra calls
 }
 
 func (g *GitHubForge) item(pr ghPR, me string) Item {

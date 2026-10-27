@@ -91,8 +91,9 @@ type Forge interface {
 	Requested(ctx context.Context) ([]Item, error)
 	// Open lists all open PR/MRs of one project (path without host).
 	Open(ctx context.Context, project string) ([]Item, error)
-	// CountOpen returns the number of open PR/MRs of one project.
-	CountOpen(ctx context.Context, project string) (int, error)
+	// ListOpen lists all open PR/MRs of one project like Open, but without
+	// the extra per-item calls (approvals, file counts): for "Show all".
+	ListOpen(ctx context.Context, project string) ([]Item, error)
 	// Get fetches one PR/MR.
 	Get(ctx context.Context, project string, number int) (Item, error)
 }

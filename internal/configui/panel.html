@@ -50,6 +50,7 @@ section.repo { background: var(--panel); border: 1px solid var(--line); border-r
 .st.failed { color: var(--err); border-color: var(--err); }
 .st.stale { color: var(--warn); border-color: var(--warn); font-weight: 600; }
 .meta .stale { color: var(--warn); }
+.au { display: inline-block; font-size: 11px; line-height: 16px; padding: 0 7px; border-radius: 8px; color: #fff; background: hsl(var(--h) 55% 45%); }
 @keyframes pulse { 50% { opacity: .45; } }
 .title { min-width: 0; }
 .title a { color: var(--text); text-decoration: none; font-weight: 500; }
@@ -101,6 +102,15 @@ section.history h2 + .hrow { border-top: none; }
 </main>
 <script>
 "use strict";
+// author is a badge coloured from the username, the same on every load.
+function author(user) {
+  if (!user) return null;
+  let x = 2166136261;
+  for (const ch of user.toLowerCase()) x = Math.imul(x ^ ch.codePointAt(0), 16777619) >>> 0;
+  const el = h("span", { class: "au", title: "author" }, user);
+  el.style.setProperty("--h", String(x % 360));
+  return el;
+}
 const T = new URLSearchParams(location.search).get("t");
 const $ = (s) => document.querySelector(s);
 const h = (tag, attrs = {}, ...kids) => {
@@ -179,7 +189,7 @@ function entryRow(e) {
     h("div", { class: "title" },
       h("div", {}, h("span", { class: "ref" }, e.ref), h("a", { href: e.url, target: "_blank", rel: "noopener" }, e.title)),
       h("div", { class: "meta" },
-        h("span", {}, e.author), who ? h("span", {}, who) : null, files(e.files),
+        author(e.author), who ? h("span", {}, who) : null, files(e.files),
         e.urgent ? h("span", { class: "why" }, "⚡ " + e.urgent_why + (e.acked ? " (acknowledged)" : "")) : null,
         e.stale ? h("span", { class: "stale" }, "⟳ pushed after your review" + (e.proposal && e.proposal.posted ? ` (you published ${e.proposal.posted}/${e.proposal.total})` : "")) : null,
         e.method ? h("span", {}, e.method) : null,
