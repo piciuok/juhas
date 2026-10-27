@@ -46,14 +46,24 @@ All features: [docs/FEATURES.md](docs/FEATURES.md).
 
 ## Install
 
-**One-liner** (macOS arm64/amd64, Linux amd64/arm64). It downloads the latest release, verifies its
-SHA-256, puts `juhas` in `~/.local/bin`, creates a config from your clones and enables start at login:
+**One-liner** (macOS arm64/amd64, Linux amd64/arm64). It installs everything in one go:
+
+1. `juhas` from the latest release, with its SHA-256 checked, into `~/.local/bin`;
+2. what is missing of git, `gh` and `glab` — each with a line on what it is for and a question, so you can skip
+   the forge you do not use (from Homebrew when you have it, otherwise the official release, checksum-verified, into
+   `~/.local/bin`, no sudo);
+3. the AI CLI you pick: Claude Code, Codex, both or none;
+4. optional desktop helpers, asked separately (macOS: `terminal-notifier`; Linux: `notify-send` + `zenity`, via sudo);
+5. the logins (`gh auth login`, `glab auth login`, `claude auth login`, `codex login`) for the CLIs that are not logged in yet;
+6. a config from your clones, start at login, and `juhas doctor`.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/piciuok/juhas/main/scripts/install.sh | sh
 ```
 
-Pin a version with `JUHAS_VERSION=v0.2.0`, or only put the binary in place with `JUHAS_NO_START=1`.
+Options: `JUHAS_VERSION=v0.3.1` pins a version, `JUHAS_AI=claude|codex|both|none` picks the AI without asking,
+`JUHAS_YES=1` takes every default without questions (and skips the logins), `JUHAS_NO_DEPS=1` installs only Juhas,
+`JUHAS_NO_START=1` only puts the binary in place.
 
 **Manually** — download `juhas_<version>_<os>_<arch>.tar.gz` from [Releases](https://github.com/piciuok/juhas/releases),
 check it against `checksums.txt`, then:
