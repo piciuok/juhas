@@ -2,22 +2,36 @@ name: Release
 
 # Push a tag like v0.2.0 (or v0.3.0-rc.1 for a pre-release) to build the
 # binaries and publish a GitHub release. Running apps pick it up through
-# their update check.
+# their update check. GitHub sends no push event when more than three tags
+# are pushed at once; run it by hand for such a tag (Actions → Release →
+# Run workflow, or gh workflow run release.yml -f tag=v0.3.0).
 on:
   push:
     tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release, e.g. v0.3.0"
+        required: true
 
 permissions:
   contents: write
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: Check the tag
+        run: echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
       - run: go vet ./... && go test ./...
 
   build:
@@ -34,6 +48,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -43,10 +59,10 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: ${{ matrix.cgo }}
         run: |
-          ver="${GITHUB_REF_NAME#v}"
+          ver="${TAG#v}"
           dir="juhas_${ver}_${GOOS}_${GOARCH}"
           mkdir -p "dist/$dir"
-          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o "dist/$dir/juhas" ./cmd/juhas
+          go build -trimpath -ldflags "-s -w -X main.version=${TAG}" -o "dist/$dir/juhas" ./cmd/juhas
           cp README.md config.example.json "dist/$dir/"
           [ -f LICENSE ] && cp LICENSE "dist/$dir/" || true
           tar -C dist -czf "dist/$dir.tar.gz" "$dir"
@@ -61,6 +77,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
       - uses: actions/download-artifact@v8
         with:
           path: dist
@@ -72,11 +90,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # a release made by hand for the tag keeps its title and notes: just add the files
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz dist/checksums.txt --clobber
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.tar.gz dist/checksums.txt --clobber
             exit 0
           fi
           flags=""
-          case "$GITHUB_REF_NAME" in *-*) flags="--prerelease";; esac
-          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/checksums.txt \
-            --title "Juhas $GITHUB_REF_NAME" --generate-notes --verify-tag $flags
+          case "$TAG" in *-*) flags="--prerelease";; esac
+          gh release create "$TAG" dist/*.tar.gz dist/checksums.txt \
+            --title "Juhas $TAG" --generate-notes --verify-tag $flags
