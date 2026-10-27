@@ -186,7 +186,7 @@ configuration reference.
 
 | Command | What it does |
 |---|---|
-| `juhas` / `juhas tray` | the tray icon (default) |
+| `juhas` / `juhas tray [--foreground]` | the tray icon (default); from a terminal it starts in the background and gives the shell back |
 | `juhas panel` | open the Panel of the running tray |
 | `juhas poll [--dry-run]` | check the queue once |
 | `juhas review [--agent claude\|codex] <url>` | review one PR/MR in the terminal, with live output |

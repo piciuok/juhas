@@ -13,7 +13,8 @@ import (
 const usage = `juhas — PR/MRs to review + AI review (macOS, Linux)
 
 Usage:
-  juhas [tray]                 tray icon (default)
+  juhas [tray] [--foreground]  tray icon (default); from a terminal it starts in
+                                      the background and returns
   juhas panel                  queue panel in the browser (needs the tray icon running)
   juhas poll [--dry-run]       check the queue once
   juhas review [--agent claude|codex] <url>

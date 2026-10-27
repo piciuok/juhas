@@ -161,6 +161,11 @@ func Relaunch(exe string) (quit bool, err error) {
 	return true, spawnTray(exe)
 }
 
+// StartTray starts the tray as a detached process and returns.
+func StartTray(exe, logDir string) error {
+	return detachTray(exe, logDir)
+}
+
 func desktopPath() string {
 	dir := os.Getenv("XDG_CONFIG_HOME")
 	if dir == "" {

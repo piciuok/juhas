@@ -1,8 +1,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/piciuok/juhas/internal/app"
 	"github.com/piciuok/juhas/internal/config"
@@ -39,8 +42,49 @@ func init() {
 }
 
 func cmdTray(args []string) error {
+	fs := flag.NewFlagSet("tray", flag.ExitOnError)
+	fg := fs.Bool("foreground", false, "stay attached to the terminal (default when not started from one)")
+	fs.Parse(args)
+	if !*fg && fromTerminal() {
+		return startBackground()
+	}
 	platform.UseLoginShellPath() // the same CLIs as in the terminal
 	return tray.Run(tray.Options{DoctorOptions: doctorOptions(false), Version: version})
+}
+
+// fromTerminal: typed in a shell. launchd, XDG autostart and the update
+// relaunch have no terminal and run the tray in the foreground.
+func fromTerminal() bool {
+	st, err := os.Stdin.Stat()
+	return err == nil && st.Mode()&os.ModeCharDevice != 0
+}
+
+// startBackground starts the tray detached and gives the shell back.
+func startBackground() error {
+	store := state.Open()
+	if store.TrayRunning() {
+		fmt.Println("Juhas is already running — click its icon in the menu bar / tray, or open the Panel: juhas panel")
+		return nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	if exe, err = filepath.EvalSymlinks(exe); err != nil {
+		return err
+	}
+	logDir := filepath.Dir(store.Path())
+	if err := platform.StartTray(exe, logDir); err != nil {
+		return err
+	}
+	for i := 0; i < 50 && !store.TrayRunning(); i++ {
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !store.TrayRunning() {
+		return fmt.Errorf("Juhas did not start — see %s", filepath.Join(logDir, "tray.err.log"))
+	}
+	fmt.Println("Juhas is running in the background — its icon is in the menu bar / tray.")
+	return nil
 }
 
 func cmdInstall(args []string) error {
@@ -58,7 +102,7 @@ func cmdInstall(args []string) error {
 	if _, err := os.Stat(config.DefaultPath()); err != nil {
 		fmt.Println("No config — create it: juhas config init")
 	}
-	fmt.Println("Start it now in the background:", exe, "tray &")
+	fmt.Println("Start it now:", exe)
 	return nil
 }
 

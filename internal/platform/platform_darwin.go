@@ -144,6 +144,22 @@ func Relaunch(exe string) (quit bool, err error) {
 	return true, spawnTray(exe)
 }
 
+// StartTray starts the tray in the background and returns. When the
+// LaunchAgent runs this same binary, launchd starts it (so updates and
+// logout handling work as at login); otherwise it is a detached process.
+func StartTray(exe, logDir string) error {
+	if b, err := os.ReadFile(plistPath()); err == nil && strings.Contains(string(b), "<string>"+xmlEsc(exe)+"</string>") {
+		domain := fmt.Sprintf("gui/%d", os.Getuid())
+		if exec.Command("/bin/launchctl", "kickstart", domain+"/"+launchLabel).Run() == nil {
+			return nil
+		}
+		if exec.Command("/bin/launchctl", "bootstrap", domain, plistPath()).Run() == nil {
+			return nil // RunAtLoad starts it
+		}
+	}
+	return detachTray(exe, logDir)
+}
+
 func plistPath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, "Library", "LaunchAgents", launchLabel+".plist")
