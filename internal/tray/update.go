@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"fyne.io/systray"
 	"os"
 	"time"
 
@@ -203,8 +204,13 @@ func (a *App) installUpdate() {
 	platform.Notify(platform.Notification{Title: "Juhas updated to " + tag, Message: "Restarting…", Open: rel.URL})
 	time.Sleep(time.Second)            // let the notification go out
 	_ = os.Remove(WebURLFile(a.store)) // the new process serves on a new port
-	if err := update.Restart(exe, "tray"); err != nil {
+	quit, err := platform.Relaunch(exe)
+	if err != nil {
 		fail(fmt.Errorf("installed, but the restart failed (%v) — quit and start Juhas again", err))
+		return
+	}
+	if quit {
+		systray.Quit() // the new process starts once this one is gone
 	}
 }
 

@@ -155,6 +155,12 @@ func Notify(n Notification) {
 	_ = exec.Command("notify-send", append(base, "--", n.Title, trunc(n.Message, 300))...).Start()
 }
 
+// Relaunch starts the tray anew from exe (e.g. after an update): a fresh
+// process waits for this one, which must quit (quit=true).
+func Relaunch(exe string) (quit bool, err error) {
+	return true, spawnTray(exe)
+}
+
 func desktopPath() string {
 	dir := os.Getenv("XDG_CONFIG_HOME")
 	if dir == "" {

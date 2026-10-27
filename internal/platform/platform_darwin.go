@@ -133,6 +133,17 @@ func asq(s string) string {
 	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
 }
 
+// Relaunch starts the tray anew from exe (e.g. after an update). Under the
+// LaunchAgent launchd restarts the job and stops this process itself
+// (quit=false); otherwise a fresh process waits for this one, which must
+// quit (quit=true).
+func Relaunch(exe string) (quit bool, err error) {
+	if os.Getenv("XPC_SERVICE_NAME") == launchLabel {
+		return false, exec.Command("/bin/launchctl", "kickstart", "-k", fmt.Sprintf("gui/%d/%s", os.Getuid(), launchLabel)).Start()
+	}
+	return true, spawnTray(exe)
+}
+
 func plistPath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, "Library", "LaunchAgents", launchLabel+".plist")

@@ -22,7 +22,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -327,13 +326,6 @@ func (c *Client) Install(ctx context.Context, r *Release, exe string) error {
 		return err
 	}
 	return Replace(exe, bin)
-}
-
-// Restart replaces this process with exe (same PID, so launchd/systemd keep
-// tracking it). File descriptors are close-on-exec, which also releases the
-// single-instance lock for the new image.
-func Restart(exe string, args ...string) error {
-	return syscall.Exec(exe, append([]string{exe}, args...), os.Environ())
 }
 
 // Status is what the tray remembers between checks.
