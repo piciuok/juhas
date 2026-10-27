@@ -192,3 +192,30 @@ func TestWriteRawConflict(t *testing.T) {
 		t.Errorf("stale save: %v, want ErrChanged", err)
 	}
 }
+
+func TestSetPinned(t *testing.T) {
+	c, err := Parse([]byte(`{"repos": {"gl.example/team/app": {"path": "~/app"}}}`), "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetPinned("gl.example/team/new", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetPinned("GL.example/team/app", true); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := c.Effective("gl.example/team/new"); !s.Pinned || s.ShowAll != ShowAllFold {
+		t.Errorf("new repo: %+v", s)
+	}
+	if s, _ := c.Effective("gl.example/team/app"); !s.Pinned || s.Path == "" {
+		t.Errorf("app keeps its path: %+v", s)
+	}
+	_ = c.SetPinned("gl.example/team/new", false)
+	_ = c.SetPinned("gl.example/team/app", false)
+	if _, ok := c.Repos["gl.example/team/new"]; ok {
+		t.Error("an unpinned repo with nothing else must be removed")
+	}
+	if s, _ := c.Effective("gl.example/team/app"); s.Pinned || s.Path == "" {
+		t.Errorf("app unpinned, path kept: %+v", s)
+	}
+}

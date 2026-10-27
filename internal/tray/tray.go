@@ -655,7 +655,7 @@ func (a *App) rebuild() {
 			systray.AddSeparator()
 		}
 		for _, r := range repos {
-			if len(byRepo[strings.ToLower(r.Key)]) == 0 {
+			if len(byRepo[strings.ToLower(r.Key)]) == 0 && !r.Pinned {
 				continue // everything reviewed: it lives in history
 			}
 			a.addRepo(r, byRepo[strings.ToLower(r.Key)], st, cfg, runner)
@@ -675,6 +675,7 @@ func (a *App) rebuild() {
 
 	systray.AddSeparator()
 	item(nil, "🔄 Check now (also re-asks skipped)", a.requestManualPoll)
+	item(nil, "📌 Pin a project… (shows all its PR/MRs)", a.openPanelPin)
 	item(nil, "📁 Briefs folder", func() {
 		d := config.Expand(cfg.BriefsDir)
 		_ = os.MkdirAll(d, 0o755)
@@ -716,7 +717,11 @@ func (a *App) addRepo(r queue.RepoStat, entries []queue.Entry, st *state.State, 
 	if r.Open >= 0 {
 		open = fmt.Sprintf("%d open · ", r.Open)
 	}
-	label := fmt.Sprintf("📦 %s — %s%d for me", app.ShortRepo(r.Key), open, r.Queued)
+	icon := "📦"
+	if r.Pinned {
+		icon = "📌"
+	}
+	label := fmt.Sprintf("%s %s — %s%d for me", icon, app.ShortRepo(r.Key), open, r.Queued)
 	if r.Urgent > 0 {
 		label += fmt.Sprintf(" · 🔴%d", r.Urgent)
 	}
@@ -724,19 +729,70 @@ func (a *App) addRepo(r queue.RepoStat, entries []queue.Entry, st *state.State, 
 	for _, e := range entries {
 		a.addEntry(e, st.Job(e.URL), cfg, runner)
 	}
-	if len(r.All) > 0 {
-		queued := map[string]bool{}
-		for _, e := range entries {
-			queued[e.URL] = true
-		}
-		all := systray.AddMenuItem(fmt.Sprintf("    📋 Show all PR/MRs (%d)", len(r.All)), "Every open PR/MR of the repo")
-		for _, o := range r.All {
-			url := o.URL
-			item(all, allLabel(o, queued[o.URL]), func() { _ = platform.Open(url) })
-		}
-		all.AddSeparator()
-		item(all, "🌐 Open the list in the browser", func() { _ = platform.Open(listURL(r.Key, entries)) })
+	queued := map[string]bool{}
+	for _, e := range entries {
+		queued[e.URL] = true
 	}
+	key := r.Key
+	if r.Inline { // show_all: inline — the others right here, not folded
+		for _, o := range r.All {
+			if queued[o.URL] {
+				continue
+			}
+			url := o.URL
+			item(nil, "    "+allLabel(o, false), func() { _ = platform.Open(url) })
+		}
+	}
+	all := systray.AddMenuItem(fmt.Sprintf("    📋 Show all PR/MRs (%d)", len(r.All)), "Every open PR/MR of the repo")
+	if r.Open < 0 && !r.Pinned {
+		all.SetTitle("    📋 Show all PR/MRs")
+	}
+	if len(r.All) == 0 && r.Open == 0 {
+		all.AddSubMenuItem("✓ No open PR/MRs", "").Disable()
+	}
+	for _, o := range r.All {
+		url := o.URL
+		item(all, allLabel(o, queued[o.URL]), func() { _ = platform.Open(url) })
+	}
+	all.AddSeparator()
+	item(all, "🌐 Open the list in the browser", func() { _ = platform.Open(listURL(key, entries)) })
+	if r.Inline {
+		item(all, "↕ Fold the others under Show all", func() { a.setShowAll(key, config.ShowAllFold) })
+	} else if len(r.All) > 0 {
+		item(all, "↕ List the others right in the menu", func() { a.setShowAll(key, config.ShowAllInline) })
+	}
+	if r.Pinned {
+		item(all, "📌 Unpin (show only when something is for me)", func() { a.setPinned(key, false) })
+	} else {
+		item(all, "📌 Pin (always show, with all its PR/MRs)", func() { a.setPinned(key, true) })
+	}
+}
+
+// setShowAll sets where a repo's other PR/MRs go (fold | inline).
+func (a *App) setShowAll(key, mode string) {
+	err := config.Modify(a.cfgPath, func(cfg *config.Config) error {
+		if mode == config.ShowAllFold {
+			return cfg.SetRepoField(key, "show_all", nil) // the default
+		}
+		return cfg.SetRepoField(key, "show_all", mode)
+	})
+	if err != nil {
+		platform.Notify(platform.Notification{Title: "Juhas", Message: "Not saved: " + err.Error()})
+		return
+	}
+	_ = a.loadConfig()
+	a.requestPoll()
+}
+
+// setPinned pins or unpins a repo in the config and polls again.
+func (a *App) setPinned(key string, on bool) {
+	err := config.Modify(a.cfgPath, func(cfg *config.Config) error { return cfg.SetPinned(key, on) })
+	if err != nil {
+		platform.Notify(platform.Notification{Title: "Juhas", Message: "Pin not saved: " + err.Error()})
+		return
+	}
+	_ = a.loadConfig() // the panel shows the new pin before the poll ends
+	a.requestPoll()
 }
 
 // limitsLine is the one-line plan usage of the agents, re-read at most
@@ -948,6 +1004,14 @@ func (a *App) openPanel() {
 	_ = platform.Open(s.PanelURL())
 }
 
+func (a *App) openPanelPin() {
+	s, _, err := a.web()
+	if err != nil {
+		return
+	}
+	_ = platform.Open(s.PanelURL() + "#pin")
+}
+
 func (a *App) openPanelHistory() {
 	s, _, err := a.web()
 	if err != nil {
@@ -1027,7 +1091,7 @@ func menuSignature(snap *queue.Snapshot, st *state.State, rep *doctor.Report, po
 	if snap != nil {
 		fmt.Fprintf(&b, "%s|%d|", snap.At.Format("15:04"), len(snap.Errors))
 		for _, r := range snap.Repos {
-			fmt.Fprintf(&b, "%s:%d:%d:%d|", r.Key, r.Open, r.Queued, r.Urgent)
+			fmt.Fprintf(&b, "%s:%d:%d:%d:%v:%v|", r.Key, r.Open, r.Queued, r.Urgent, r.Pinned, r.Inline)
 			for _, o := range r.All {
 				fmt.Fprintf(&b, "%s:%s:%s:%v|", o.URL, o.Title, o.Author, o.Draft)
 			}

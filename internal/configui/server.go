@@ -51,6 +51,8 @@ var reviewHTML []byte
 type Panel interface {
 	PanelModel() any
 	PanelDo(action, url, agent string, on bool) error
+	// PanelProjects lists the projects one can pin, matching q.
+	PanelProjects(q string) (any, error)
 }
 
 // Detect describes how a repo would be reviewed (set by main to avoid an
@@ -392,6 +394,12 @@ func start(path string, onSave func(), persistent bool) (*Server, string, error)
 		return s.Panel.PanelModel(), nil
 	}))
 	mux.HandleFunc("POST /api/panel/do", s.api(s.panelDo))
+	mux.HandleFunc("GET /api/panel/projects", s.api(func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if s.Panel == nil {
+			return nil, errors.New("the panel only works while the tray icon is running (juhas tray)")
+		}
+		return s.Panel.PanelProjects(r.URL.Query().Get("q"))
+	}))
 	mux.HandleFunc("GET /api/log", s.api(s.logChunk))
 	mux.HandleFunc("GET /api/config", s.api(s.getConfig))
 	mux.HandleFunc("POST /api/validate", s.api(s.validate))

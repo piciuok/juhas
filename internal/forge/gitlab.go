@@ -334,3 +334,22 @@ func (g *GitLabForge) Get(ctx context.Context, project string, number int) (Item
 	g.fillFiles(ctx, items)
 	return items[0], err
 }
+
+// Projects lists the projects I am a member of (up to 50), recently active first.
+func (g *GitLabForge) Projects(ctx context.Context, search string) ([]string, error) {
+	path := "projects?membership=true&simple=true&archived=false&order_by=last_activity_at&per_page=50"
+	if search != "" {
+		path += "&search=" + url.QueryEscape(search) + "&search_namespaces=true"
+	}
+	var ps []struct {
+		Path string `json:"path_with_namespace"`
+	}
+	if err := g.api(ctx, path, &ps); err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, p.Path)
+	}
+	return out, nil
+}

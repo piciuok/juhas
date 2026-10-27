@@ -1,8 +1,10 @@
 package tray
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,9 +14,11 @@ import (
 	"github.com/piciuok/juhas/internal/config"
 	"github.com/piciuok/juhas/internal/doctor"
 	"github.com/piciuok/juhas/internal/effects"
+	"github.com/piciuok/juhas/internal/forge"
 	"github.com/piciuok/juhas/internal/platform"
 	"github.com/piciuok/juhas/internal/queue"
 	"github.com/piciuok/juhas/internal/review"
+	"github.com/piciuok/juhas/internal/scan"
 	"github.com/piciuok/juhas/internal/state"
 )
 
@@ -60,6 +64,9 @@ type panelProp struct {
 
 type panelRepo struct {
 	Key     string       `json:"key"`
+	Pinned  bool         `json:"pinned"`
+	Inline  bool         `json:"inline"` // show_all: inline
+	All     []panelOpen  `json:"all"`    // every open PR/MR (empty = not listed)
 	Short   string       `json:"short"`
 	Mode    string       `json:"mode"`
 	Open    int          `json:"open"`
@@ -67,6 +74,29 @@ type panelRepo struct {
 	Urgent  int          `json:"urgent"`
 	ListURL string       `json:"list_url"`
 	Entries []panelEntry `json:"entries"`
+}
+
+// panelOpen is one line of a repo's full list.
+type panelOpen struct {
+	URL    string `json:"url"`
+	Ref    string `json:"ref"`
+	Title  string `json:"title"`
+	Author string `json:"author"`
+	Draft  bool   `json:"draft"`
+	Queued bool   `json:"queued"` // waits for me: also on the main list
+	Status string `json:"status"` // of a review started from this list
+	Busy   bool   `json:"busy"`
+	LogID  string `json:"log_id"`
+	Brief  bool   `json:"brief"`
+	Clone  bool   `json:"clone"` // the repo has a local clone: it can be reviewed
+}
+
+// panelProject is a project one can pin.
+type panelProject struct {
+	Key    string `json:"key"`
+	Pinned bool   `json:"pinned"`
+	Clone  string `json:"clone,omitempty"`
+	From   string `json:"from"` // config | clone | forge | typed
 }
 
 // panelHistory is one reviewed PR/MR.
@@ -140,12 +170,27 @@ func (a *App) PanelModel() any {
 	}
 	for _, r := range snap.Repos {
 		entries := byRepo[strings.ToLower(r.Key)]
-		if len(entries) == 0 {
+		if len(entries) == 0 && !r.Pinned {
 			continue
 		}
-		pr := panelRepo{Key: r.Key, Short: app.ShortRepo(r.Key), Mode: r.Mode, Open: r.Open, Queued: r.Queued, Urgent: r.Urgent, ListURL: listURL(r.Key, entries)}
+		pr := panelRepo{Key: r.Key, Short: app.ShortRepo(r.Key), Mode: r.Mode, Open: r.Open, Queued: r.Queued, Urgent: r.Urgent,
+			ListURL: listURL(r.Key, entries), Pinned: r.Pinned, Inline: r.Inline, Entries: []panelEntry{}, All: []panelOpen{}}
+		queued := map[string]bool{}
 		for _, e := range entries {
 			pr.Entries = append(pr.Entries, a.panelEntry(e, st, cfg, runner))
+			queued[e.URL] = true
+		}
+		clone := a.repoDir(r.Key) != ""
+		for _, o := range r.All {
+			po := panelOpen{URL: o.URL, Ref: o.Ref, Title: o.Title, Author: o.Author, Draft: o.Draft, Queued: queued[o.URL], Clone: clone}
+			po.Busy = runner != nil && runner.Busy(o.URL)
+			if j := st.Job(o.URL); j != nil {
+				po.Status, po.Brief = j.Status, j.Brief != ""
+				if j.Log != "" {
+					po.LogID = strings.TrimSuffix(lastPath(j.Log), ".log")
+				}
+			}
+			pr.All = append(pr.All, po)
 		}
 		m.Repos = append(m.Repos, pr)
 	}
@@ -298,6 +343,20 @@ func (a *App) PanelDo(action, url, agent string, on bool) error {
 		a.saveMapping(e.Repo, e.PathGuess)
 	case "poll":
 		a.requestManualPoll()
+	case "pin", "unpin":
+		key, err := projectKey(url)
+		if err != nil {
+			return err
+		}
+		a.setPinned(key, action == "pin")
+	case "show_all":
+		mode := config.ShowAllFold
+		if on {
+			mode = config.ShowAllInline
+		}
+		a.setShowAll(url, mode)
+	case "review_open":
+		return a.reviewOpen(url, agent)
 	case "screen_effect":
 		a.setScreenEffect(on)
 	case "zap":
@@ -322,6 +381,148 @@ func (a *App) PanelDo(action, url, agent string, on bool) error {
 		return errors.New("unknown action " + action)
 	}
 	return nil
+}
+
+// repoDir is the repo's clone: its path setting, else one found in scan_dirs.
+func (a *App) repoDir(key string) string {
+	a.mu.Lock()
+	cfg, c := a.cfg, a.collector
+	a.mu.Unlock()
+	if s, err := cfg.Effective(key); err == nil && s.Path != "" && isDir(config.Expand(s.Path)) {
+		return config.Expand(s.Path)
+	}
+	if c == nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return c.Guess(ctx, key)
+}
+
+// reviewOpen starts a review of a PR/MR from a repo's full list, one that
+// does not wait for me (nobody asked me, e.g. in a pinned repo).
+func (a *App) reviewOpen(url, agent string) error {
+	a.mu.Lock()
+	cfg, c, runner := a.cfg, a.collector, a.runner
+	a.mu.Unlock()
+	if c == nil || runner == nil {
+		return errors.New("not ready yet — try again after the first check")
+	}
+	_, repo, n, err := forge.ParseURL(url)
+	if err != nil {
+		return err
+	}
+	if k, ok := cfg.RepoKey(repo); ok {
+		repo = k
+	}
+	s, err := cfg.Effective(repo)
+	if err != nil {
+		return err
+	}
+	dir := a.repoDir(repo)
+	if dir == "" {
+		return errors.New("no local clone of " + repo + " — clone it into a scanned folder or set its path in Settings")
+	}
+	host, project := forge.SplitKey(repo)
+	f, ok := c.ForRepo(host, s.Account)
+	if !ok {
+		return errors.New("no account for " + host + " in the config")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	it, err := f.Get(ctx, project, n)
+	if err != nil {
+		return err
+	}
+	it.Repo = repo
+	if agent != config.AgentClaude && agent != config.AgentCodex {
+		agent = ""
+	}
+	runner.Enqueue(it, dir, agent)
+	return nil
+}
+
+// projectKey turns what was typed or picked into a "host/group/proj" key:
+// a key, a project URL or any URL inside the project (MR list, an MR).
+func projectKey(in string) (string, error) {
+	in = strings.TrimSpace(in)
+	if _, repo, _, err := forge.ParseURL(in); err == nil {
+		return repo, nil
+	}
+	if i := strings.Index(in, "/-/"); i > 0 {
+		in = in[:i] // gitlab: …/proj/-/merge_requests
+	}
+	if !strings.Contains(in, "://") && !strings.Contains(in, "@") {
+		in = "https://" + in
+	}
+	key, ok := forge.RemoteKey(in)
+	key = strings.TrimSuffix(key, "/pulls") // github: …/repo/pulls
+	if !ok || strings.Count(key, "/") < 2 {
+		return "", errors.New("not a project: give host/group/project or its URL")
+	}
+	return key, nil
+}
+
+// PanelProjects implements configui.Panel: projects to pin, those already
+// in the config and the scanned clones first, then the forges' member
+// projects, matching q.
+func (a *App) PanelProjects(q string) (any, error) {
+	a.mu.Lock()
+	cfg, c := a.cfg, a.collector
+	a.mu.Unlock()
+	if cfg == nil || c == nil {
+		return nil, errors.New("not ready yet")
+	}
+	q = strings.TrimSpace(q)
+	lq := strings.ToLower(q)
+	var out []panelProject
+	seen := map[string]bool{}
+	add := func(key, from, clone string) {
+		lk := strings.ToLower(key)
+		if seen[lk] || (lq != "" && from != "typed" && !strings.Contains(lk, lq)) {
+			return
+		}
+		seen[lk] = true
+		p := panelProject{Key: key, From: from, Clone: config.Contract(clone)}
+		if s, err := cfg.Effective(key); err == nil {
+			p.Pinned = s.Pinned
+		}
+		out = append(out, p)
+	}
+	if strings.Contains(q, "/") {
+		if k, err := projectKey(q); err == nil {
+			add(k, "typed", "")
+		}
+	}
+	for _, k := range cfg.RepoKeys() {
+		add(k, "config", "")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	for _, cl := range scan.OnHosts(c.Clones(ctx), cfg.HostNames()) {
+		add(cl.Key, "clone", cl.Dir)
+	}
+	var errs []string
+	for _, k := range c.Order {
+		f := c.Forges[k]
+		names, err := f.Projects(ctx, q)
+		if err != nil {
+			errs = append(errs, f.Host()+": "+err.Error())
+			continue
+		}
+		for _, n := range names {
+			add(strings.ToLower(f.Host())+"/"+n, "forge", "")
+		}
+	}
+	if len(out) > 80 {
+		out = out[:80]
+	}
+	return map[string]any{"projects": out, "errors": errs}, nil
+}
+
+func isDir(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.IsDir()
 }
 
 // history lists reviewed PR/MRs, newest first: those still open with an

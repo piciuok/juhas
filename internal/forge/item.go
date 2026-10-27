@@ -96,6 +96,9 @@ type Forge interface {
 	ListOpen(ctx context.Context, project string) ([]Item, error)
 	// Get fetches one PR/MR.
 	Get(ctx context.Context, project string, number int) (Item, error)
+	// Projects lists the projects I am a member of, recently active first
+	// and filtered by search when set (paths without host): to pin one.
+	Projects(ctx context.Context, search string) ([]string, error)
 }
 
 // ParseURL extracts platform, repo key and number from a PR/MR web URL:

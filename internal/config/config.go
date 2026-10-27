@@ -206,6 +206,12 @@ type Settings struct {
 	Language      Language `json:"language"`
 	Agent         string   `json:"agent"`   // claude | codex
 	Account       string   `json:"account"` // which login reads the repo when a host has several ("" = the first)
+	// Pinned keeps the repo in the menu and the panel with all its open
+	// PR/MRs, even when none of them waits for me.
+	Pinned bool `json:"pinned"`
+	// ShowAll is where the repo's other open PR/MRs (not waiting for me)
+	// go: fold = under "Show all", inline = listed right in the menu.
+	ShowAll string `json:"show_all"`
 }
 
 // Language of what the review produces: the brief I read, and the comments
@@ -240,6 +246,9 @@ type Review struct {
 const (
 	GuardReadOnly = "read-only"
 	GuardOff      = "off"
+
+	ShowAllFold   = "fold"
+	ShowAllInline = "inline"
 
 	PublishComment     = "comment"
 	PublishFromVerdict = "from_verdict"
@@ -292,7 +301,9 @@ const builtinSettings = `{
   "flash_decisions": true,
   "language": { "brief": "en", "comments": "en" },
   "agent": "claude",
-  "account": ""
+  "account": "",
+  "pinned": false,
+  "show_all": "fold"
 }`
 
 // BuiltinSettings is the bottom settings layer as JSON (for the config UI).
@@ -599,6 +610,9 @@ func (s Settings) validate() error {
 	default:
 		return fmt.Errorf("review.publish_event %q: want comment|from_verdict", s.Review.PublishEvent)
 	}
+	if s.ShowAll != ShowAllFold && s.ShowAll != ShowAllInline {
+		return fmt.Errorf("show_all %q: want fold|inline", s.ShowAll)
+	}
 	if s.Agent != AgentClaude && s.Agent != AgentCodex {
 		return fmt.Errorf("agent %q: want claude|codex", s.Agent)
 	}
@@ -613,6 +627,21 @@ func (s Settings) validate() error {
 
 // SetRepoPath sets repos[key].path, keeping the repo's other overrides.
 func (c *Config) SetRepoPath(key, path string) error {
+	return c.SetRepoField(key, "path", Contract(path))
+}
+
+// SetPinned pins or unpins a repo. Unpinning drops the field, and the
+// repo's entry when nothing else is left in it.
+func (c *Config) SetPinned(key string, on bool) error {
+	if on {
+		return c.SetRepoField(key, "pinned", true)
+	}
+	return c.SetRepoField(key, "pinned", nil)
+}
+
+// SetRepoField sets one field of repos[key] (nil removes it), keeping the
+// repo's other overrides. A repo left empty is removed.
+func (c *Config) SetRepoField(key, field string, v any) error {
 	k, ok := c.RepoKey(key)
 	if !ok {
 		k = key
@@ -624,7 +653,18 @@ func (c *Config) SetRepoPath(key, path string) error {
 	if m == nil {
 		m = map[string]any{}
 	}
-	m["path"] = Contract(path)
+	if v == nil {
+		delete(m, field)
+	} else {
+		m[field] = v
+	}
+	if c.Repos == nil {
+		c.Repos = map[string]json.RawMessage{}
+	}
+	if len(m) == 0 {
+		delete(c.Repos, k)
+		return nil
+	}
 	b, err := json.Marshal(m)
 	if err != nil {
 		return err

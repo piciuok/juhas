@@ -171,6 +171,9 @@ const GLOBAL = [
 
 const SETTINGS = [
   { g: "Repository", k: "path", t: "text", l: "Clone directory", repoOnly: true, pick: "set", help: "Empty = auto-mapped from the scanned folders." },
+  { g: "Repository", k: "pinned", t: "bool", l: "📌 Pinned", repoOnly: true, help: "Always show the repo in the menu and the Panel with all its open PR/MRs, even when none waits for you — e.g. when nobody assigns reviewers. Pin and unpin also from the Panel." },
+  { g: "Repository", k: "show_all", t: "select", o: ["fold", "inline"], l: "Other PR/MRs",
+    help: "The repo's open PR/MRs that are not waiting for you (pinned repos, or the “N open” counter): fold = under “📋 Show all”, so the menu stays short; inline = listed right under the repo." },
   { g: "What to queue", k: "mode", t: "select", o: ["requested", "open"], l: "Mode",
     help: "requested: when my review is requested or I'm assigned; open: all open PR/MRs of the repo (except mine, ignored authors' and ones I already approved)." },
   { g: "What to queue", k: "account", t: "text", l: "Account", help: "Which login reads this repo when its host has several accounts (Accounts tab), e.g. for “open” mode and counters. Empty = the host's first watched account. PR/MRs asked of you are always handled by the account that was asked." },

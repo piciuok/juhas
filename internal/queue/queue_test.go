@@ -35,12 +35,16 @@ func (f *fakeForge) Requested(context.Context) ([]forge.Item, error) {
 }
 func (f *fakeForge) Open(_ context.Context, p string) ([]forge.Item, error) { return f.open[p], nil }
 func (f *fakeForge) ListOpen(_ context.Context, p string) ([]forge.Item, error) {
+	if p == "team/pinned" {
+		return []forge.Item{mr("gl.example/team/pinned", 9, nil)}, nil
+	}
 	if p == "team/other" {
 		return []forge.Item{mr("gl.example/team/other", 1, nil), mr("gl.example/team/other", 2, nil)}, nil
 	}
 	return f.open[p], nil
 }
 func (f *fakeForge) Get(context.Context, string, int) (forge.Item, error) { return forge.Item{}, nil }
+func (f *fakeForge) Projects(context.Context, string) ([]string, error)   { return nil, nil }
 
 var now = time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)
 
@@ -59,7 +63,8 @@ const cfgJSON = `{
   "defaults": {"urgent": {"labels": ["urgent"], "older_than": "24h"}},
   "repos": {
     "gl.example/team/app": {"mode": "open"},
-    "gl.example/team/quiet": {"on_new": "off"}
+    "gl.example/team/quiet": {"on_new": "off"},
+    "gl.example/team/pinned": {"pinned": true}
   }
 }`
 
@@ -120,6 +125,9 @@ func TestCollect(t *testing.T) {
 	}
 	if s := stats[app]; len(s.All) != 6 || s.All[0].Number < s.All[1].Number {
 		t.Errorf("app: all open PR/MRs, newest first: %+v", s.All)
+	}
+	if s := stats["gl.example/team/pinned"]; !s.Pinned || s.Queued != 0 || s.Open != 1 || len(s.All) != 1 {
+		t.Errorf("pinned stat = %+v (listed although nothing waits for me)", s)
 	}
 	if _, ok := stats["gl.example/team/quiet"]; ok {
 		t.Error("on_new=off repo must not show up")

@@ -35,6 +35,8 @@ type RepoStat struct {
 	Open   int    `json:"open"`   // all open PR/MRs (-1 = not counted)
 	Queued int    `json:"queued"` // entries in the queue
 	Urgent int    `json:"urgent"`
+	Pinned bool   `json:"pinned,omitempty"` // shown even with nothing for me
+	Inline bool   `json:"inline,omitempty"` // list All right in the menu (show_all: inline)
 	// All open PR/MRs of the repo, newest first, for "Show all" (empty
 	// when not counted).
 	All []Open `json:"all,omitempty"`
@@ -216,7 +218,7 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 		if st, ok := stats[lk]; ok {
 			return st
 		}
-		st := &RepoStat{Key: key, Mode: s.Mode, Open: -1}
+		st := &RepoStat{Key: key, Mode: s.Mode, Open: -1, Pinned: s.Pinned, Inline: s.ShowAll == config.ShowAllInline}
 		if all, ok := openAll[lk]; ok {
 			st.Open, st.All = len(all), all
 		}
@@ -224,7 +226,7 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 		return st
 	}
 	for _, key := range c.Cfg.RepoKeys() {
-		if s, err := c.Cfg.Effective(key); err == nil && s.Mode == config.ModeOpen && s.OnNew != config.OnNewOff {
+		if s, err := c.Cfg.Effective(key); err == nil && (s.Mode == config.ModeOpen || s.Pinned) && s.OnNew != config.OnNewOff {
 			stat(key, s)
 		}
 	}
@@ -266,7 +268,7 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 
 	for _, st := range stats {
 		s, _ := c.Cfg.Effective(st.Key)
-		if st.Open < 0 && s.CountOpen && st.Queued > 0 {
+		if st.Open < 0 && (s.CountOpen && st.Queued > 0 || s.Pinned) {
 			host, project := forge.SplitKey(st.Key)
 			if f, ok := c.ForRepo(host, s.Account); ok {
 				if items, err := f.ListOpen(ctx, project); err == nil {
@@ -363,6 +365,14 @@ func IsUrgent(it forge.Item, u config.Urgent, now time.Time) (bool, string) {
 
 // Guess returns a clone of key found in scan_dirs (cached scan), or "".
 func (c *Collector) Guess(ctx context.Context, key string) string {
+	if f := scan.Find(c.Clones(ctx), key); len(f) > 0 {
+		return f[0].Dir
+	}
+	return ""
+}
+
+// Clones are the clones found in scan_dirs (scanned at most every ScanEvery).
+func (c *Collector) Clones(ctx context.Context) []scan.Clone {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.clones == nil || c.Now().Sub(c.scannedAt) > ScanEvery {
@@ -373,10 +383,7 @@ func (c *Collector) Guess(ctx context.Context, key string) string {
 		c.clones = scan.Clones(ctx, roots)
 		c.scannedAt = c.Now()
 	}
-	if f := scan.Find(c.clones, key); len(f) > 0 {
-		return f[0].Dir
-	}
-	return ""
+	return c.clones
 }
 
 func isDir(p string) bool {

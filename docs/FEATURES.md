@@ -10,6 +10,12 @@ configuration reference.
 - **Two modes per repo:**
   - `requested`: PR/MRs where your review was requested (on GitHub, team requests too) or you are the assignee.
   - `open`: every open PR/MR of the repo, minus yours, those you already approved, and bots (`ignore_authors`, regexes supported).
+- **📌 Pinned repos** (`pinned: true`, or *📌 Pin a project…* in the menu and the Panel): the repo always shows,
+  with all its open PR/MRs, even when nobody asks you to review there (e.g. a team that never assigns reviewers).
+  PR/MRs you are asked about still show as usual. The others are folded under *Show all*, or listed right in the
+  menu with `show_all: inline` (toggle ↕ per repo). The Panel finds projects to pin among the config, the scanned
+  clones and the projects you are a member of, or takes a pasted project/MR URL, and can review a PR/MR from the
+  full list although nobody asked you.
 - **Filters:** drafts hidden by default (`include_drafts`); `on_new: off` hides a repo entirely.
 - **Polling** every `poll_interval` (3 min by default, at least 30 s) plus *Check now*. Lists are paginated up
   to 1000 PR/MRs, and one failing call does not drop a whole host.
@@ -120,7 +126,7 @@ configuration reference.
   - PR/MRs grouped by repo, with status icons (⏳ running, 📝 reviewed, ⟳ stale, ❌ failed, 🔕 skipped) and the
     author with a colour badge derived from the username (also in the Panel);
   - *Show all PR/MRs (n)* at the end of each repo: every open PR/MR of the repo, the ones waiting for you
-    marked with •;
+    marked with •, and *📌 Pin* / *↕ List the others right in the menu* for the repo;
   - *📊 Limits used*: one line with the Claude and Codex 5-hour and weekly usage (reset times on hover).
     Claude's comes from its reviews, Codex's from its own session files;
   - per-item actions: review with Claude or Codex, cancel, skip, open the brief, open the PR/MR;
@@ -186,8 +192,9 @@ configuration reference.
 - **Native dialogs and notifications:**
   - macOS: `osascript`, optionally `alerter` and `terminal-notifier`;
   - Linux: `notify-send` actions, `zenity` or `kdialog`.
-- **A one-line installer** that verifies the release checksum, creates a config from your clones and enables
-  start at login (a LaunchAgent on macOS, an XDG autostart entry on Linux).
+- **A one-line installer** that verifies the release checksum, offers to install git, gh, glab, Claude Code
+  and/or Codex and the desktop helpers (each with what it is for), runs the logins, creates a config from your
+  clones and enables start at login (a LaunchAgent on macOS, an XDG autostart entry on Linux).
 
 ## Command line
 

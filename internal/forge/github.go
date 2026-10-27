@@ -319,3 +319,28 @@ func (g *GitHubForge) Get(ctx context.Context, project string, number int) (Item
 	}
 	return g.item(*res.Data.Repository.PullRequest, res.Data.Viewer.Login), nil
 }
+
+// Projects lists my repositories and those of my orgs (up to 100), recently
+// pushed first; search filters them by name.
+func (g *GitHubForge) Projects(ctx context.Context, search string) ([]string, error) {
+	out, err := runAs(ctx, g.acc, "gh", "api", "--hostname", g.host,
+		"user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member")
+	if err != nil {
+		return nil, err
+	}
+	var rs []struct {
+		Name     string `json:"full_name"`
+		Archived bool   `json:"archived"`
+	}
+	if err := json.Unmarshal(out, &rs); err != nil {
+		return nil, fmt.Errorf("gh api user/repos (%s): %w", g.host, err)
+	}
+	search = strings.ToLower(search)
+	names := make([]string, 0, len(rs))
+	for _, r := range rs {
+		if !r.Archived && strings.Contains(strings.ToLower(r.Name), search) {
+			names = append(names, r.Name)
+		}
+	}
+	return names, nil
+}
