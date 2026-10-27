@@ -740,7 +740,7 @@ func (a *App) addRepo(r queue.RepoStat, entries []queue.Entry, st *state.State, 
 }
 
 // limitsLine is the one-line plan usage of the agents, re-read at most
-// once a minute ("" until one has reported).
+// once a minute.
 type limitsLine struct {
 	mu           sync.Mutex
 	at           time.Time
@@ -757,17 +757,17 @@ func (l *limitsLine) get() limitsLine {
 			name string
 			read func() (limits.Usage, bool)
 		}{{"Claude", limits.Claude}, {"Codex", limits.Codex}} {
-			if u, ok := ag.read(); ok {
-				if short := u.Short(now); short != "" {
-					parts = append(parts, ag.name+" "+short)
-					details = append(details, u.Detail(ag.name))
-				}
+			u, ok := ag.read()
+			if short := u.Short(now); ok && short != "" {
+				parts = append(parts, ag.name+" "+short)
+				details = append(details, u.Detail(ag.name))
+			} else if ag.name == "Claude" {
+				// Claude reports its limits only inside a run
+				parts = append(parts, "Claude — after its first review")
+				details = append(details, "Claude: its limits come with a review run")
 			}
 		}
-		l.at, l.text, l.detail = now, "", strings.Join(details, "\n")
-		if len(parts) > 0 {
-			l.text = "📊 Limits used: " + strings.Join(parts, "   ·   ")
-		}
+		l.at, l.text, l.detail = now, "📊 Limits used: "+strings.Join(parts, "   ·   "), strings.Join(details, "\n")
 	}
 	return limitsLine{text: l.text, detail: l.detail}
 }
