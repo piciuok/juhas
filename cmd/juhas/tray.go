@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/piciuok/juhas/internal/app"
 	"github.com/piciuok/juhas/internal/config"
 	"github.com/piciuok/juhas/internal/platform"
@@ -55,8 +57,9 @@ func cmdTray(args []string) error {
 // fromTerminal: typed in a shell. launchd, XDG autostart and the update
 // relaunch have no terminal and run the tray in the foreground.
 func fromTerminal() bool {
-	st, err := os.Stdin.Stat()
-	return err == nil && st.Mode()&os.ModeCharDevice != 0
+	// a real tty, not just a character device: launchd's stdin is /dev/null
+	_, err := unix.IoctlGetTermios(int(os.Stdin.Fd()), ioctlGetTermios)
+	return err == nil
 }
 
 // startBackground starts the tray detached and gives the shell back.
