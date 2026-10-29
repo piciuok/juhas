@@ -41,6 +41,16 @@ type Job struct {
 	Owner      int       `json:"owner,omitempty"` // pid of the juhas process that queued/runs it
 	StartedAt  time.Time `json:"started_at,omitempty"`
 	FinishedAt time.Time `json:"finished_at,omitempty"`
+	// Session of the last finished review, which the chat resumes.
+	Session *Session `json:"session,omitempty"`
+}
+
+// Session is an agent conversation that can be resumed.
+type Session struct {
+	Agent string `json:"agent"` // claude | codex
+	ID    string `json:"id"`
+	Dir   string `json:"dir"` // where it ran (claude finds its sessions by directory)
+	SHA   string `json:"sha"` // the head it saw
 }
 
 // Reviewed: a brief exists for the current head — the item belongs to history.

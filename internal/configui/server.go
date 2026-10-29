@@ -74,6 +74,8 @@ type Server struct {
 	// `juhas config ui`.
 	Doctor     func(withAI bool) *doctor.Report
 	LastDoctor func() *doctor.Report
+	// ChatEnv, when set, runs the chat on the review page (the tray sets it).
+	ChatEnv func() review.ChatEnv
 
 	token string
 	srv   *http.Server
@@ -387,6 +389,11 @@ func start(path string, onSave func(), persistent bool) (*Server, string, error)
 	mux.HandleFunc("GET /api/review/file", s.api(s.reviewFile))
 	mux.HandleFunc("POST /api/review/save", s.api(s.reviewSave))
 	mux.HandleFunc("POST /api/review/publish", s.api(s.reviewPublish))
+	mux.HandleFunc("GET /api/chat", s.api(s.chatGet))
+	mux.HandleFunc("POST /api/chat/send", s.api(s.chatSend))
+	mux.HandleFunc("POST /api/chat/cancel", s.api(s.chatCancel))
+	mux.HandleFunc("POST /api/chat/reset", s.api(s.chatReset))
+	mux.HandleFunc("POST /api/chat/comment", s.api(s.chatComment))
 	mux.HandleFunc("GET /api/panel", s.api(func(w http.ResponseWriter, r *http.Request) (any, error) {
 		if s.Panel == nil {
 			return nil, errors.New("the panel only works while the tray icon is running (juhas tray)")

@@ -15,6 +15,7 @@ import (
 
 	"github.com/piciuok/juhas/internal/config"
 	"github.com/piciuok/juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/state"
 )
 
 // Codex has no hook API we can rely on, and its read-only sandbox also cuts
@@ -27,7 +28,6 @@ type codexWorkspace struct {
 	CtxDir   string // pr.md, diff.patch, ci.txt
 	Worktree string // "" when checking out failed; Codex then reads the main clone
 	Base     string
-	cleanup  func()
 }
 
 func cacheDir() string {
@@ -38,7 +38,7 @@ func cacheDir() string {
 }
 
 func prepareCodex(ctx context.Context, it forge.Item, dir, id string, log io.Writer) (*codexWorkspace, error) {
-	ws := &codexWorkspace{CtxDir: filepath.Join(cacheDir(), "runs", id), Base: it.TargetBranch}
+	ws := &codexWorkspace{CtxDir: runDir(id), Base: it.TargetBranch}
 	_ = os.RemoveAll(ws.CtxDir)
 	if err := os.MkdirAll(ws.CtxDir, 0o700); err != nil {
 		return nil, err
@@ -55,38 +55,12 @@ func prepareCodex(ctx context.Context, it forge.Item, dir, id string, log io.Wri
 	}
 	fmt.Fprintf(log, "%s   ↳ diff: %d lines\n", stamp(), strings.Count(c.Diff, "\n"))
 
-	wt := filepath.Join(cacheDir(), "worktrees", id)
-	git := func(args ...string) (string, error) {
-		return gitIn(ctx, dir, args...)
-	}
-	ws.cleanup = func() {
-		// the run's context is done after a timeout or cancel; clean up anyway
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
-		defer cancel()
-		_, _ = gitIn(ctx, dir, "worktree", "remove", "--force", wt)
-		_, _ = gitIn(ctx, dir, "worktree", "prune")
-		_ = os.RemoveAll(ws.CtxDir)
-	}
-	_, _ = git("worktree", "remove", "--force", wt) // leftover from an interrupted run
-	fmt.Fprintf(log, "%s ● worktree at head %s (%s)\n", stamp(), short(it.HeadSHA), forge.HeadRef(it))
-	refs := []string{forge.HeadRef(it)}
-	if it.TargetBranch != "" {
-		refs = append(refs, it.TargetBranch+":refs/remotes/origin/"+it.TargetBranch)
-	}
-	if out, err := git(append([]string{"fetch", "--no-tags", "origin"}, refs...)...); err != nil {
-		fmt.Fprintf(log, "%s   ✗ git fetch: %s — Codex will read the main clone (the diff stays the source of truth)\n", stamp(), oneLine(out, 200))
-		return ws, nil
-	}
-	sha := it.HeadSHA
-	if sha == "" {
-		sha, _ = git("rev-parse", "FETCH_HEAD")
-	}
-	if out, err := git("worktree", "add", "--detach", wt, sha); err != nil {
-		fmt.Fprintf(log, "%s   ✗ git worktree: %s — Codex will read the main clone\n", stamp(), oneLine(out, 200))
+	wt, err := EnsureWorktree(ctx, it, dir, id, log)
+	if err != nil {
+		fmt.Fprintf(log, "%s   ✗ %v — Codex will read the main clone (the diff stays the source of truth)\n", stamp(), err)
 		return ws, nil
 	}
 	ws.Worktree = wt
-	fmt.Fprintf(log, "%s   ↳ %s\n", stamp(), config.Contract(wt))
 	return ws, nil
 }
 
@@ -155,13 +129,12 @@ func CodexArgs(a config.Agent, guard, workdir, lastMsg string) []string {
 	return append(args, "-")
 }
 
-func runCodex(ctx context.Context, cfg *config.Config, s config.Settings, it forge.Item, m Method, dir, logPath string, log io.Writer, started func(int)) (string, error) {
+func runCodex(ctx context.Context, cfg *config.Config, s config.Settings, it forge.Item, m Method, dir, logPath string, log io.Writer, started func(int)) (string, *state.Session, error) {
 	id := strings.TrimSuffix(filepath.Base(logPath), ".log")
 	ws, err := prepareCodex(ctx, it, dir, id, log)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	defer ws.cleanup()
 	workdir := dir
 	if ws.Worktree != "" {
 		workdir = ws.Worktree
@@ -179,10 +152,10 @@ func runCodex(ctx context.Context, cfg *config.Config, s config.Settings, it for
 	cmd.Stderr = stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if err := cmd.Start(); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if started != nil {
 		started(cmd.Process.Pid)
@@ -191,7 +164,7 @@ func runCodex(ctx context.Context, cfg *config.Config, s config.Settings, it for
 	stderr.flush()
 	err = cmd.Wait()
 	if ctx.Err() != nil {
-		return "", ctx.Err()
+		return "", nil, ctx.Err()
 	}
 	body, _ := os.ReadFile(last)
 	text := strings.TrimSpace(string(body))
@@ -203,17 +176,22 @@ func runCodex(ctx context.Context, cfg *config.Config, s config.Settings, it for
 		if strings.Contains(sr.Failed, "requires a newer version of Codex") {
 			// e.g. an old Homebrew codex earlier in PATH than the one the terminal uses
 			bin, _ := exec.LookPath(a.Bin)
-			return "", fmt.Errorf("codex at %s is too old for the model set in ~/.codex/config.toml — update it, or set codex.bin to a newer codex in Settings (log: %s)", bin, logPath)
+			return "", nil, fmt.Errorf("codex at %s is too old for the model set in ~/.codex/config.toml — update it, or set codex.bin to a newer codex in Settings (log: %s)", bin, logPath)
 		}
-		return "", fmt.Errorf("codex: %s (log: %s)", sr.Failed, logPath)
+		return "", nil, fmt.Errorf("codex: %s (log: %s)", sr.Failed, logPath)
 	case err != nil && text == "":
-		return "", fmt.Errorf("codex exited with an error: %v (log: %s)", err, logPath)
+		return "", nil, fmt.Errorf("codex exited with an error: %v (log: %s)", err, logPath)
 	}
-	return text, nil
+	var sess *state.Session
+	if sr.Thread != "" {
+		sess = &state.Session{Agent: config.AgentCodex, ID: sr.Thread, Dir: workdir, SHA: it.HeadSHA}
+	}
+	return text, sess, nil
 }
 
 // CodexResult summarises a codex --json stream.
 type CodexResult struct {
+	Thread string // thread id, for `codex exec resume`
 	Text   string // last agent message
 	Turns  int
 	Tokens int
@@ -221,8 +199,9 @@ type CodexResult struct {
 }
 
 type codexEvent struct {
-	Type string `json:"type"`
-	Item *struct {
+	Type     string `json:"type"`
+	ThreadID string `json:"thread_id"`
+	Item     *struct {
 		Type             string `json:"type"`
 		Text             string `json:"text"`
 		Message          string `json:"message"`
@@ -261,6 +240,7 @@ func ConsumeCodexStream(r io.Reader, log io.Writer) CodexResult {
 		}
 		switch ev.Type {
 		case "thread.started":
+			res.Thread = ev.ThreadID
 			fmt.Fprintf(log, "%s ● Codex session started\n", stamp())
 		case "turn.completed":
 			res.Turns++

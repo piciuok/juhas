@@ -28,7 +28,7 @@ func (g *GitHubForge) Account() Account { return g.acc }
 func (g *GitHubForge) Platform() string { return GitHub }
 
 const ghPRFields = `
-  url number title isDraft createdAt headRefOid headRefName baseRefName
+  url number title state isDraft createdAt headRefOid headRefName baseRefName
   author { login }
   repository { nameWithOwner }
   labels(first: 20) { nodes { name } }
@@ -41,6 +41,7 @@ type ghPR struct {
 	URL         string    `json:"url"`
 	Number      int       `json:"number"`
 	Title       string    `json:"title"`
+	State       string    `json:"state"`
 	IsDraft     bool      `json:"isDraft"`
 	CreatedAt   time.Time `json:"createdAt"`
 	HeadRefOid  string    `json:"headRefOid"`
@@ -244,6 +245,7 @@ func (g *GitHubForge) item(pr ghPR, me string) Item {
 		Number:       pr.Number,
 		URL:          pr.URL,
 		Title:        pr.Title,
+		State:        normState(pr.State),
 		Author:       pr.Author.Login,
 		Draft:        pr.IsDraft,
 		HeadSHA:      pr.HeadRefOid,

@@ -18,6 +18,7 @@ import (
 
 	"github.com/piciuok/juhas/internal/config"
 	"github.com/piciuok/juhas/internal/forge"
+	"github.com/piciuok/juhas/internal/state"
 )
 
 const (
@@ -292,6 +293,7 @@ type Result struct {
 	Method   Method
 	Agent    string
 	SHA      string
+	Session  *state.Session // nil when the agent reported none
 }
 
 // Label is "Claude · skill:review".
@@ -362,9 +364,9 @@ func Run(ctx context.Context, cfg *config.Config, s config.Settings, it forge.It
 
 	var body string
 	if agent == config.AgentCodex {
-		body, err = runCodex(ctx, cfg, s, it, m, dir, logPath, log, started)
+		body, res.Session, err = runCodex(ctx, cfg, s, it, m, dir, logPath, log, started)
 	} else {
-		body, err = runClaude(ctx, a, s, it, m, dir, logPath, log, started)
+		body, res.Session, err = runClaude(ctx, a, s, it, m, dir, logPath, log, started)
 	}
 	switch {
 	case ctx.Err() == context.DeadlineExceeded:
@@ -406,10 +408,10 @@ func Run(ctx context.Context, cfg *config.Config, s config.Settings, it forge.It
 	return res, nil
 }
 
-func runClaude(ctx context.Context, a config.Agent, s config.Settings, it forge.Item, m Method, dir, logPath string, log io.Writer, started func(int)) (string, error) {
+func runClaude(ctx context.Context, a config.Agent, s config.Settings, it forge.Item, m Method, dir, logPath string, log io.Writer, started func(int)) (string, *state.Session, error) {
 	guardCmd := GuardCommand(s.Review.GuardAllow)
 	if guardCmd == "" && s.Review.Guard != config.GuardOff {
-		return "", errors.New("cannot locate the juhas binary for the read-only guard — not starting a review without it")
+		return "", nil, errors.New("cannot locate the juhas binary for the read-only guard — not starting a review without it")
 	}
 	cmd := exec.CommandContext(ctx, a.Bin, Args(a, s.Review, m, guardCmd)...)
 	cmd.Dir = dir
@@ -421,10 +423,10 @@ func runClaude(ctx context.Context, a config.Agent, s config.Settings, it forge.
 	cmd.Stderr = log
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if err := cmd.Start(); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if started != nil {
 		started(cmd.Process.Pid)
@@ -432,18 +434,22 @@ func runClaude(ctx context.Context, a config.Agent, s config.Settings, it forge.
 	sr := watchStream(stdout, log, cmd) // returns at EOF, before Wait closes the pipe
 	err = cmd.Wait()
 	if ctx.Err() != nil {
-		return "", ctx.Err()
+		return "", nil, ctx.Err()
 	}
 	switch {
 	case err != nil && !sr.Got:
-		return "", fmt.Errorf("claude exited with an error: %v (log: %s)", err, logPath)
+		return "", nil, fmt.Errorf("claude exited with an error: %v (log: %s)", err, logPath)
 	case sr.IsError || (sr.Subtype != "" && sr.Subtype != "success"):
 		if sr.Subtype == "error_max_turns" {
-			return "", fmt.Errorf("turn limit reached (%d) — raise review.max_turns (log: %s)", sr.Turns, logPath)
+			return "", nil, fmt.Errorf("turn limit reached (%d) — raise review.max_turns (log: %s)", sr.Turns, logPath)
 		}
-		return "", fmt.Errorf("claude: %s (log: %s)", sr.Subtype, logPath)
+		return "", nil, fmt.Errorf("claude: %s (log: %s)", sr.Subtype, logPath)
 	}
-	return sr.Text, nil
+	var sess *state.Session
+	if sr.Session != "" {
+		sess = &state.Session{Agent: config.AgentClaude, ID: sr.Session, Dir: dir, SHA: it.HeadSHA}
+	}
+	return sr.Text, sess, nil
 }
 
 // HangAfterResult: a session that has reported its result but sends nothing

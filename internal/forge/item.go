@@ -31,12 +31,35 @@ type Item struct {
 
 	Files *Files `json:"files,omitempty"` // nil = not fetched
 
+	State string `json:"state,omitempty"` // StateOpen | StateMerged | StateClosed ("" = not known)
+
 	Account string `json:"account,omitempty"` // Account.Key that found it ("" = the CLI's default)
 
 	Requested    bool `json:"requested"`      // my review was requested / I am a reviewer
 	Assigned     bool `json:"assigned"`       // I am an assignee
 	ApprovedByMe bool `json:"approved_by_me"` // my approval is on it
 	Mine         bool `json:"mine"`           // I am the author
+}
+
+const (
+	StateOpen   = "open"
+	StateMerged = "merged"
+	StateClosed = "closed"
+)
+
+// Gone: merged or closed — nothing more to review.
+func (i Item) Gone() bool { return i.State == StateMerged || i.State == StateClosed }
+
+func normState(s string) string {
+	switch strings.ToLower(s) {
+	case "open", "opened", "locked":
+		return StateOpen
+	case "merged":
+		return StateMerged
+	case "closed":
+		return StateClosed
+	}
+	return ""
 }
 
 // Files counts the changed files of a PR/MR by kind.

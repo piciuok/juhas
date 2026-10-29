@@ -36,6 +36,7 @@ type glMR struct {
 	IID          int       `json:"iid"`
 	ProjectID    int       `json:"project_id"`
 	Title        string    `json:"title"`
+	State        string    `json:"state"`
 	WebURL       string    `json:"web_url"`
 	Draft        bool      `json:"draft"`
 	WIP          bool      `json:"work_in_progress"`
@@ -278,6 +279,7 @@ func (g *GitLabForge) item(mr glMR, me string) Item {
 		Number:       mr.IID,
 		URL:          mr.WebURL,
 		Title:        mr.Title,
+		State:        normState(mr.State),
 		Author:       mr.Author.Username,
 		Draft:        mr.Draft || mr.WIP,
 		HeadSHA:      mr.SHA,

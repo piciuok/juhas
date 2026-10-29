@@ -159,6 +159,8 @@ const GLOBAL = [
   { g: "Working hours", k: "working_hours.from", t: "text", l: "From", help: "HH:MM, e.g. 08:00" },
   { g: "Working hours", k: "working_hours.to", t: "text", l: "To", help: "HH:MM, e.g. 16:00 (earlier than From = over midnight)" },
   { g: "Working hours", k: "working_hours.days", t: "list", l: "Days", help: "One per line: mon, tue, wed, thu, fri, sat, sun. Empty = Monday to Friday." },
+  { g: "Chat and worktrees", k: "chat.max_turns", t: "num", l: "Chat: turns per question", help: "The most agent steps (reading files, running read-only commands) for one question in the review chat." },
+  { g: "Chat and worktrees", k: "worktrees.keep_for", t: "dur", l: "Remove unused worktrees after", help: "Codex reviews and the chat work in a checkout of the PR/MR. It is removed when the PR/MR is merged or closed, or after this long without use, e.g. 168h (a week). The Panel lists them and removes one by hand." },
   { g: "Claude", k: "claude.bin", t: "text", l: "Command" },
   { g: "Claude", k: "claude.model", t: "text", l: "Model", list: ["opus", "sonnet", "haiku", "claude-opus-5-5", "claude-sonnet-5-5"], help: "Empty = Claude Code's default model. An alias (opus, sonnet) or a full ID." },
   { g: "Claude", k: "claude.effort", t: "select", o: ["", "low", "medium", "high", "xhigh", "max"], l: "Effort", help: "Empty = default." },

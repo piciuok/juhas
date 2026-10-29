@@ -34,6 +34,7 @@ type streamEvent struct {
 	DurationMS int64   `json:"duration_ms"`
 	CostUSD    float64 `json:"total_cost_usd"`
 	Model      string  `json:"model"`
+	SessionID  string  `json:"session_id"`
 	// rate_limit_event: plan usage, kept for the tray's limits line
 	RateLimitInfo json.RawMessage `json:"rate_limit_info"`
 }
@@ -46,7 +47,8 @@ type StreamResult struct {
 	Turns    int
 	Duration time.Duration
 	CostUSD  float64
-	Got      bool // a result event arrived
+	Got      bool   // a result event arrived
+	Session  string // session id, for --resume
 }
 
 // ConsumeStream renders claude's stream-json into a human-readable run log,
@@ -57,6 +59,7 @@ func ConsumeStream(r io.Reader, log io.Writer) StreamResult { return consumeStre
 // which the hang watchdog uses.
 func consumeStream(r io.Reader, log io.Writer, onEvent func(result bool)) StreamResult {
 	var res StreamResult
+	session := ""
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 1<<20), 64<<20)
 	for sc.Scan() {
@@ -68,6 +71,9 @@ func consumeStream(r io.Reader, log io.Writer, onEvent func(result bool)) Stream
 		}
 		if onEvent != nil {
 			onEvent(ev.Type == "result")
+		}
+		if ev.SessionID != "" {
+			session = ev.SessionID
 		}
 		ind := ""
 		if ev.ParentToolUseID != "" {
@@ -123,6 +129,7 @@ func consumeStream(r io.Reader, log io.Writer, onEvent func(result bool)) Stream
 		}
 		fmt.Fprintf(log, "%s %s: %d turns, %s, $%.2f\n", stamp(), status, res.Turns, res.Duration.Round(time.Second), res.CostUSD)
 	}
+	res.Session = session
 	return res
 }
 

@@ -213,6 +213,7 @@ func (r *Runner) run(ctx context.Context, it forge.Item, dir, agent string) {
 			j.Error = ""
 			j.Brief = res.Brief
 			j.BriefSHA = res.SHA
+			j.Session = res.Session
 		}
 		final = *j
 	})

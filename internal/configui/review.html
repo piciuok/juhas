@@ -60,6 +60,40 @@ footer { position: fixed; bottom: 0; left: 0; right: 0; background: var(--panel)
 footer .count { color: var(--muted); font-size: 13px; margin-right: auto; }
 footer select { font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
 .verdict .dec { font-size: 13px; margin-left: 8px; }
+/* chat on the right */
+:root { --chat-w: 420px; }
+#chat { position: fixed; top: 0; right: 0; bottom: 0; width: min(var(--chat-w), 100vw); z-index: 10; background: var(--panel); border-left: 1px solid var(--line); display: none; flex-direction: column; }
+body.chat-on #chat { display: flex; }
+@media (min-width: 1100px) {
+  body.chat-on header, body.chat-on main, body.chat-on footer { margin-right: var(--chat-w); }
+  body.chat-on footer { right: var(--chat-w); margin-right: 0; }
+  body.chat-on main { margin-left: max(0px, calc((100vw - var(--chat-w) - 980px) / 2)); }
+}
+@media (max-width: 1099px) { body.chat-on #chat { box-shadow: -8px 0 24px rgba(0,0,0,.25); } }
+#chat .chead { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; }
+#chat .chead b { flex: 1; font-size: 14px; }
+#chat .csub { padding: 6px 14px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
+#msgs { flex: 1; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.cm { border-radius: 10px; padding: 8px 11px; max-width: 100%; overflow-wrap: anywhere; font-size: 13.5px; }
+.cm.user { align-self: flex-end; background: color-mix(in srgb, var(--accent) 16%, var(--panel)); white-space: pre-wrap; max-width: 88%; }
+.cm.assistant { background: var(--chip); }
+.cm.note { align-self: center; font-size: 12px; color: var(--muted); background: none; padding: 2px 6px; text-align: center; }
+.cm.note.err { color: var(--err); }
+.cm p { margin: 0 0 6px; } .cm p:last-child { margin-bottom: 0; }
+.cm h1, .cm h2, .cm h3, .cm h4 { font-size: 13.5px; margin: 8px 0 4px; }
+.cm ul, .cm ol { margin: 4px 0 6px; padding-left: 20px; }
+.cm code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--input); padding: 0 3px; border-radius: 3px; }
+.cm pre { background: var(--input); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; overflow: auto; margin: 6px 0; }
+.cm pre code { background: none; padding: 0; white-space: pre; }
+.cm a { color: var(--accent); }
+.sugg { border: 1px dashed var(--accent); border-radius: 8px; padding: 7px 9px; margin: 6px 0; background: var(--panel); }
+.sugg .loc { font-size: 12px; }
+.sugg .body { white-space: pre-wrap; margin: 4px 0 6px; }
+#progress { font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); white-space: pre-wrap; padding: 6px 14px; border-top: 1px solid var(--line); max-height: 150px; overflow: auto; display: none; }
+#chat form { border-top: 1px solid var(--line); padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+#chat form textarea { min-height: 64px; max-height: 40vh; resize: vertical; }
+#chat form .row { display: flex; gap: 8px; align-items: center; }
+#chat form .row .note { margin: 0; flex: 1; }
 </style>
 </head>
 <body>
@@ -67,7 +101,22 @@ footer select { font: inherit; font-size: 13px; padding: 4px 8px; border-radius:
   <h1 id="title">Review proposal</h1>
   <button id="acceptAll">✓ Accept all</button>
   <button id="rejectAll">✕ Reject all</button>
+  <button id="chatToggle" title="Ask the agent about its review">💬 Chat</button>
 </header>
+<aside id="chat" aria-label="Chat about this review">
+  <div class="chead"><b>💬 Chat about this review</b>
+    <button id="chatReset" title="Forget this conversation; the next question starts again from the review">↺ New</button>
+    <button id="chatClose" title="Hide the chat">✕</button></div>
+  <div class="csub" id="chatSub">Local: nothing is published. The agent stays read-only.</div>
+  <div id="msgs"></div>
+  <div id="progress"></div>
+  <form id="chatForm">
+    <textarea id="chatText" placeholder="Ask about the PR/MR or the review… (Enter sends, Shift+Enter is a new line)"></textarea>
+    <div class="row"><span class="note" id="chatNote"></span>
+      <button type="button" id="chatStop" style="display:none">⏹ Stop</button>
+      <button type="submit" class="primary" id="chatSend">Send</button></div>
+  </form>
+</aside>
 <main>
   <div id="banners"></div>
   <p class="verdict" id="verdict"></p>
@@ -238,6 +287,7 @@ async function load() {
   try {
     const r = await api("/api/review?job=" + JOB);
     P = r.proposal; stale = r.stale;
+    document.querySelectorAll("#acceptAll, #rejectAll, footer").forEach((el) => el.style.display = "");
     const ref = P.platform === "github" ? "#" + P.number : "!" + P.number;
     $("#title").replaceChildren(h("a", { href: P.url, target: "_blank", rel: "noopener" }, `${ref} ${P.title}`),
       h("span", { class: "sub" }, `${P.repo} · ${P.agent} · head ${String(P.head_sha || "").slice(0, 10)} · ${new Date(P.created_at).toLocaleString()}`));
@@ -249,7 +299,16 @@ async function load() {
     if (stale) b.append(h("div", { class: "banner warn" }, `New commits since the review (now ${String(r.head_now).slice(0, 10)}). Line numbers may be off — consider reviewing again.`));
     if (r.lookup_error) b.append(h("div", { class: "banner err" }, "Couldn't check the PR/MR: " + r.lookup_error));
     render();
-  } catch (e) { $("#banners").replaceChildren(h("div", { class: "banner err" }, e.message)); }
+  } catch (e) {
+    if (/^no proposal/.test(e.message)) {
+      // nothing to accept here, but the review can still be talked over
+      $("#banners").replaceChildren(h("div", { class: "banner warn" }, "The agent proposed no comments for this review. You can still ask about it in the chat — comments it suggests can be added here."));
+      document.querySelectorAll("#acceptAll, #rejectAll, footer").forEach((el) => el.style.display = "none");
+      if (!chatOpen) setChat(true);
+      return;
+    }
+    $("#banners").replaceChildren(h("div", { class: "banner err" }, e.message));
+  }
 }
 
 $("#acceptAll").addEventListener("click", () => { all().forEach((c) => { if (c.status === "pending" || c.status === "rejected") c.status = "accepted"; }); save(); render(); });
@@ -284,6 +343,136 @@ $("#publish").addEventListener("click", async () => {
   }
 });
 $("#event").addEventListener("change", counts);
+
+// ---- chat ------------------------------------------------------------------
+let C = null, chatTimer = null, chatOpen = false;
+try { chatOpen = location.hash === "#chat" || localStorage.getItem("juhas.chat") === "1"; } catch (_) { chatOpen = location.hash === "#chat"; }
+function setChat(on) {
+  chatOpen = on;
+  document.body.classList.toggle("chat-on", on);
+  $("#chatToggle").classList.toggle("on", on);
+  try { localStorage.setItem("juhas.chat", on ? "1" : "0"); } catch (_) {}
+  if (on) { loadChat(); setTimeout(() => $("#chatText").focus(), 0); }
+}
+
+// md renders the agent's markdown: escaped first, so nothing it writes runs.
+function md(src) {
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const inline = (s) => esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const out = []; let list = null, para = [];
+  const flush = () => { if (para.length) { out.push("<p>" + para.map(inline).join("<br>") + "</p>"); para = []; } if (list) { out.push(`</${list}>`); list = null; } };
+  const lines = src.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const fence = /^```(\S*)/.exec(l);
+    if (fence) {
+      flush();
+      const code = [];
+      while (++i < lines.length && !/^```/.test(lines[i])) code.push(lines[i]);
+      out.push("<pre><code>" + esc(code.join("\n")) + "</code></pre>");
+      continue;
+    }
+    const hd = /^(#{1,4})\s+(.*)/.exec(l);
+    const li = /^\s*(?:[-*]|(\d+)\.)\s+(.*)/.exec(l);
+    if (hd) { flush(); out.push(`<h${hd[1].length}>${inline(hd[2])}</h${hd[1].length}>`); }
+    else if (li) {
+      if (para.length) { const l2 = list; list = null; flush(); list = l2; }
+      const kind = li[1] ? "ol" : "ul";
+      if (list !== kind) { if (list) out.push(`</${list}>`); out.push(`<${kind}>`); list = kind; }
+      out.push("<li>" + inline(li[2]) + "</li>");
+    } else if (!l.trim()) flush();
+    else { if (list) { out.push(`</${list}>`); list = null; } para.push(l); }
+  }
+  flush();
+  return out.join("");
+}
+
+function suggestion(c) {
+  const where = c.file ? (c.line > 0 ? `${c.file}:${c.line}` : c.file) : "General comment";
+  const btn = h("button", { onclick: async (ev) => {
+    ev.target.disabled = true;
+    try {
+      await api("/api/chat/comment", { job: JOB, file: c.file, line: c.line, text: c.body });
+      ev.target.textContent = "✓ Added to the proposal";
+      load();
+    } catch (e) { ev.target.disabled = false; $("#chatNote").textContent = e.message; }
+  } }, "➕ Add to the proposal");
+  return h("div", { class: "sugg" }, h("div", { class: "loc" }, "💡 " + where), h("div", { class: "body" }, c.body), btn);
+}
+
+function message(m) {
+  if (m.role === "user") return h("div", { class: "cm user" }, m.text);
+  if (m.role === "note") return h("div", { class: "cm note" + (m.error ? " err" : "") }, m.error ? "✗ " + m.text : m.text);
+  const el = h("div", { class: "cm assistant" });
+  const text = m.text.replace(/```juhas-comment\s*\n[\s\S]*?\n```/g, "").trim();
+  el.innerHTML = md(text);
+  (m.comments || []).forEach((c) => el.append(suggestion(c)));
+  return el;
+}
+
+function renderChat() {
+  const box = $("#msgs");
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  box.replaceChildren(...C.messages.map(message));
+  if (!C.messages.length) box.append(h("div", { class: "cm note" }, C.job && C.job.brief
+    ? "Ask e.g. “why is this a blocker?”, “is there a test for it?”, “what would a fix look like?”. Suggested comments can go straight to the proposal."
+    : "There is no finished review of this PR/MR yet — run one first."));
+  if (C.busy) box.append(h("div", { class: "cm note" }, "⏳ the agent is thinking…"));
+  if (atBottom || C.busy) box.scrollTop = box.scrollHeight;
+  const pr = $("#progress");
+  pr.style.display = C.busy && C.progress ? "block" : "none";
+  pr.textContent = C.progress || "";
+  pr.scrollTop = pr.scrollHeight;
+  $("#chatStop").style.display = C.busy ? "" : "none";
+  $("#chatSend").disabled = C.busy || !C.available || !(C.job && C.job.brief);
+  const j = C.job;
+  const agent = C.agent ? (C.agent === "codex" ? "Codex" : "Claude") : "";
+  $("#chatSub").textContent = !C.available ? "The chat works while the Juhas tray icon is running."
+    : !C.messages.length ? (j && j.resumable ? "Continues the review's own session — the agent remembers what it read." : "Starts a new session from the brief and the proposal.") + " Local: nothing is published."
+    : (C.from_review ? `${agent} · continues the review session` : `${agent} · new session from the brief`) + " · read-only · nothing is published";
+  if (!P && j) {
+    $("#title").replaceChildren(h("a", { href: j.url, target: "_blank", rel: "noopener" }, `${j.ref} ${j.title}`), h("span", { class: "sub" }, `${j.repo} · ${j.method || ""}`));
+    document.title = `💬 ${j.ref} — chat`;
+  }
+}
+
+async function loadChat() {
+  clearTimeout(chatTimer);
+  try {
+    C = await api("/api/chat?job=" + JOB);
+    renderChat();
+    if (C.busy) chatTimer = setTimeout(loadChat, 1200);
+  } catch (e) { $("#chatNote").textContent = e.message; }
+}
+
+$("#chatForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const ta = $("#chatText"), text = ta.value.trim();
+  if (!text || (C && C.busy)) return;
+  $("#chatNote").textContent = "";
+  $("#chatSend").disabled = true;
+  try {
+    await api("/api/chat/send", { job: JOB, text });
+    ta.value = "";
+  } catch (e) { $("#chatNote").textContent = e.message; }
+  loadChat();
+});
+$("#chatText").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); $("#chatForm").requestSubmit(); }
+});
+$("#chatStop").addEventListener("click", async () => { await api("/api/chat/cancel", { job: JOB }).catch(() => {}); loadChat(); });
+$("#chatReset").addEventListener("click", async () => {
+  if (C && C.busy) return;
+  try { await api("/api/chat/reset", { job: JOB }); $("#chatNote").textContent = "New conversation."; } catch (e) { $("#chatNote").textContent = e.message; }
+  loadChat();
+});
+$("#chatToggle").addEventListener("click", () => setChat(!chatOpen));
+$("#chatClose").addEventListener("click", () => setChat(false));
+setChat(chatOpen);
 load();
 </script>
 </body>

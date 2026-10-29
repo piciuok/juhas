@@ -63,6 +63,7 @@ type App struct {
 	menuSig    string
 	limits     limitsLine // cached: Codex is read from its session files
 	ui         *configui.Server
+	sweeping   sync.Mutex // one worktree sweep at a time
 	uiURL      string
 
 	pollNow chan bool // true = the user asked ("Check now")
@@ -239,7 +240,17 @@ func (a *App) onExit() {
 	if a.runner != nil {
 		a.runner.Stop()
 	}
+	review.ChatManager.Stop()
 	a.logger.Printf("stop")
+}
+
+// chatEnv is what the review page's chat needs from the app.
+func (a *App) chatEnv() review.ChatEnv {
+	a.mu.Lock()
+	cfg, runner := a.cfg, a.runner
+	a.mu.Unlock()
+	return review.ChatEnv{Cfg: cfg, Store: a.store, Dir: a.repoDir, OnChange: a.requestRedraw,
+		ReviewBusy: func(url string) bool { return runner != nil && runner.Busy(url) }}
 }
 
 func (a *App) requestRedraw() {
@@ -327,6 +338,7 @@ func (a *App) poll(manual bool) {
 	a.mu.Lock()
 	a.snap, a.polling, a.lastErr = snap, false, ""
 	a.mu.Unlock()
+	go a.sweepWorktrees(snap)
 	if a.offHours() {
 		// a manual check off hours only refreshes the list: no questions,
 		// kicks or auto reviews — they come when working hours start
@@ -1074,6 +1086,7 @@ func (a *App) web() (*configui.Server, string, error) {
 	s.OnReview = a.requestRedraw
 	s.Doctor = a.doctorNow
 	s.LastDoctor = func() *doctor.Report { a.mu.Lock(); defer a.mu.Unlock(); return a.report }
+	s.ChatEnv = a.chatEnv
 	a.ui, a.uiURL = s, url
 	// `juhas panel` / `juhas config ui` reuse this server
 	_ = os.WriteFile(WebURLFile(a.store), []byte(s.PanelURL()+"\n"), 0o600)

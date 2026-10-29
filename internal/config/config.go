@@ -186,10 +186,23 @@ type Config struct {
 	GitLab         []Host                     `json:"gitlab"`
 	Updates        Updates                    `json:"updates"`
 	WorkingHours   WorkingHours               `json:"working_hours"`
+	Chat           Chat                       `json:"chat"`
+	Worktrees      Worktrees                  `json:"worktrees"`
 	Defaults       json.RawMessage            `json:"defaults,omitempty"`
 	Repos          map[string]json.RawMessage `json:"repos"`
 
 	path string
+}
+
+// Chat is the follow-up conversation about a reviewed PR/MR.
+type Chat struct {
+	MaxTurns int `json:"max_turns"` // agent turns per question
+}
+
+// Worktrees are the per-PR/MR checkouts Codex reviews and chats work in.
+// They go when the PR/MR is merged or closed, or after KeepFor without use.
+type Worktrees struct {
+	KeepFor Duration `json:"keep_for"`
 }
 
 // Settings is what applies to a single repository after merging.
@@ -371,6 +384,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.WorkingHours.To == "" {
 		c.WorkingHours.To = "16:00"
+	}
+	if c.Chat.MaxTurns <= 0 {
+		c.Chat.MaxTurns = 30
+	}
+	if c.Worktrees.KeepFor <= 0 {
+		c.Worktrees.KeepFor = Duration(7 * 24 * time.Hour)
 	}
 	if c.Updates.Interval <= 0 {
 		c.Updates.Interval = Duration(24 * time.Hour)

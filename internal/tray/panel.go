@@ -138,6 +138,22 @@ type panelModel struct {
 	Hours        *panelHours    `json:"hours,omitempty"` // set when working hours are on
 	Repos        []panelRepo    `json:"repos"`
 	History      []panelHistory `json:"history"`
+	Worktrees    []panelTree    `json:"worktrees"`
+	KeepFor      string         `json:"keep_for"` // worktrees.keep_for
+}
+
+// panelTree is a kept per-PR/MR worktree.
+type panelTree struct {
+	ID    string `json:"id"`
+	URL   string `json:"url"`
+	Repo  string `json:"repo"`
+	Ref   string `json:"ref"`
+	Title string `json:"title"`
+	SHA   string `json:"sha"`
+	Path  string `json:"path"`
+	Size  string `json:"size"`
+	Used  string `json:"used"`
+	Busy  bool   `json:"busy"` // a review or a chat works in it
 }
 
 // PanelModel implements configui.Panel.
@@ -174,6 +190,12 @@ func (a *App) PanelModel() any {
 	if rep != nil && rep.Worst() != doctor.OK {
 		m.Doctor = strings.TrimSpace(
 			strings.Join([]string{plural(rep.Count(doctor.Fail), "error", "errors"), plural(rep.Count(doctor.Warn), "warning", "warnings")}, ", "))
+	}
+	m.KeepFor = config.FormatDuration(cfg.Worktrees.KeepFor.D())
+	m.Worktrees = []panelTree{}
+	for _, w := range review.Worktrees() {
+		m.Worktrees = append(m.Worktrees, panelTree{ID: w.ID, URL: w.URL, Repo: app.ShortRepo(w.Repo), Ref: w.Ref, Title: w.Title,
+			SHA: shortSHA(w.SHA), Path: w.Path, Size: humanSize(w.Bytes), Used: ago(w.Used), Busy: a.treeBusy(w)})
 	}
 	if snap == nil {
 		return m
@@ -384,6 +406,8 @@ func (a *App) PanelDo(action, url, agent string, on bool) error {
 			mode = config.ShowAllInline
 		}
 		a.setShowAll(url, mode)
+	case "worktree_remove":
+		return a.removeWorktree(url)
 	case "review_open":
 		return a.reviewOpen(url, agent)
 	case "screen_effect":
@@ -410,6 +434,93 @@ func (a *App) PanelDo(action, url, agent string, on bool) error {
 		return errors.New("unknown action " + action)
 	}
 	return nil
+}
+
+// treeBusy: a review or a chat is working in the worktree.
+func (a *App) treeBusy(w review.Worktree) bool {
+	a.mu.Lock()
+	runner := a.runner
+	a.mu.Unlock()
+	return (runner != nil && runner.Busy(w.URL)) || review.ChatManager.Busy(w.ID)
+}
+
+func (a *App) removeWorktree(id string) error {
+	for _, w := range review.Worktrees() {
+		if w.ID != id {
+			continue
+		}
+		if a.treeBusy(w) {
+			return errors.New("a review or a chat is working in it — wait for it or stop it first")
+		}
+		if err := review.RemoveWorktree(context.Background(), id); err != nil {
+			return err
+		}
+		a.logger.Printf("worktree %s %s removed by hand", w.Repo, w.Ref)
+		return nil
+	}
+	return errors.New("no such worktree")
+}
+
+// sweepWorktrees removes the worktrees of merged or closed PR/MRs and the
+// ones unused for worktrees.keep_for.
+func (a *App) sweepWorktrees(snap *queue.Snapshot) {
+	if !a.sweeping.TryLock() {
+		return
+	}
+	defer a.sweeping.Unlock()
+	a.mu.Lock()
+	cfg := a.cfg
+	a.mu.Unlock()
+	open := map[string]bool{}
+	for _, e := range snap.Entries {
+		open[e.URL] = true
+	}
+	for _, r := range snap.Repos {
+		for _, o := range r.All {
+			open[o.URL] = true
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	gone := review.SweepWorktrees(ctx, cfg.Worktrees.KeepFor.D(), open, a.treeBusy, func(ctx context.Context, w review.Worktree) (forge.Item, error) {
+		_, repo, num, err := forge.ParseURL(w.URL)
+		if err != nil {
+			return forge.Item{}, err
+		}
+		host, project := forge.SplitKey(repo)
+		return forge.New(forge.AccountFor(w.Platform, host, w.Account)).Get(ctx, project, num)
+	})
+	for _, g := range gone {
+		a.logger.Printf("worktree %s %s removed: %s", g.Repo, g.Ref, g.Reason)
+	}
+}
+
+func humanSize(n int64) string {
+	switch {
+	case n >= 1<<30:
+		return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
+	case n >= 1<<20:
+		return fmt.Sprintf("%.0f MB", float64(n)/(1<<20))
+	}
+	return fmt.Sprintf("%d kB", n>>10)
+}
+
+func ago(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Hour:
+		return fmt.Sprintf("%d min ago", int(d.Minutes()))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%d h ago", int(d.Hours()))
+	}
+	return fmt.Sprintf("%d days ago", int(d.Hours()/24))
+}
+
+func shortSHA(s string) string {
+	if len(s) > 10 {
+		return s[:10]
+	}
+	return s
 }
 
 // repoDir is the repo's clone: its path setting, else one found in scan_dirs.

@@ -63,8 +63,8 @@ section.repo { background: var(--panel); border: 1px solid var(--line); border-r
 .err { color: var(--err); }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .empty { padding: 40px; text-align: center; color: var(--muted); }
-#histToggle { display: block; width: 100%; margin: 26px 0 10px; padding: 10px; border-style: dashed; color: var(--muted); background: transparent; }
-#histToggle:hover { color: var(--text); }
+#histToggle, #treesToggle { display: block; width: 100%; margin: 26px 0 10px; padding: 10px; border-style: dashed; color: var(--muted); background: transparent; }
+#histToggle:hover, #treesToggle:hover { color: var(--text); }
 section.history { border: 1px dashed var(--line); border-radius: 10px; background: color-mix(in srgb, var(--panel) 55%, transparent); }
 section.history h2 { margin: 0; padding: 10px 14px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-bottom: 1px dashed var(--line); }
 .hrow { display: grid; grid-template-columns: 130px 1fr auto; gap: 4px 14px; padding: 8px 14px; border-top: 1px dashed var(--line); align-items: center; }
@@ -115,6 +115,7 @@ section.pin input { width: 100%; font: inherit; padding: 6px 10px; border-radius
   <div id="errors"></div>
   <div id="repos"></div>
   <div id="history"></div>
+  <div id="trees"></div>
   <div id="pinbox"></div>
 </main>
 <script>
@@ -191,6 +192,7 @@ function entryRow(e) {
     const label = p.pending ? `📝 Proposal (${p.pending} awaiting decision)` : p.posted ? `📝 Published ${p.posted}/${p.total}` : `📝 Proposal (${p.accepted} ✓)`;
     actions.push(h("a", { class: "btn" + (p.pending ? " primary" : ""), href: `/review?t=${T}&job=${e.log_id}`, target: "_blank", style: p.pending ? "color:#fff" : null }, label));
   }
+  if (e.brief && e.log_id && !e.busy) actions.push(chatBtn(e.log_id));
   if (e.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: e.url }) }, e.stale ? "📄 Brief ⟳" : "📄 Brief"));
   if (e.guess) actions.push(h("button", { title: e.guess, onclick: () => act("map", { url: e.url }) }, "🔗 Map clone"));
   if (e.urgent && !e.acked) actions.push(h("button", { class: "volt", onclick: () => act("ack", { url: e.url }) }, "🔕 OK"));
@@ -251,6 +253,7 @@ function render(m) {
   $("#errors").replaceChildren(...(m.errors.length ? [h("div", { class: "errors" }, "⚠ Fetch errors: ", m.errors.join(" · "))] : []));
   const repos = $("#repos"); repos.replaceChildren();
   renderHistory(m);
+  renderTrees(m);
   if (!m.total) repos.append(h("div", { class: "empty" }, m.polled_at ? "✓ Nothing is waiting for your review" : "First check in progress…"));
   for (const r of m.repos || []) {
     if (!r.entries.length && !r.pinned) continue;
@@ -287,6 +290,9 @@ function repoSection(r) {
   return sec;
 }
 
+// chatBtn opens the review page with the chat about the PR/MR.
+const chatBtn = (id) => h("a", { class: "btn", title: "Ask the agent about its review (local, nothing is published)", href: `/review?t=${T}&job=${id}#chat`, target: "_blank" }, "💬 Chat");
+
 // otherRow is an open PR/MR nobody asked you about: look at it, or review it anyway.
 function otherRow(o) {
   const logURL = o.log_id ? `/log?t=${T}&job=${o.log_id}` : null;
@@ -299,6 +305,7 @@ function otherRow(o) {
       onclick: (ev) => { ev.target.disabled = true; act("review_open", { url: o.url }); } }, o.status === "done" ? "▶ Review again" : "▶ Review"));
   }
   if (o.log_id && o.status === "done") actions.push(h("a", { class: "btn", href: `/review?t=${T}&job=${o.log_id}`, target: "_blank" }, "📝 Proposal"));
+  if (o.brief && o.log_id && !o.busy) actions.push(chatBtn(o.log_id));
   if (o.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: o.url }) }, "📄 Brief"));
   if (logURL && !o.busy) actions.push(h("a", { class: "btn", href: logURL, target: "_blank" }, "📜 Run log"));
   const st = o.busy ? "running" : o.status || "";
@@ -370,6 +377,7 @@ function renderHistory(m) {
       const actions = [];
       if (x.proposal && x.log_id) actions.push(h("a", { class: "btn", href: `/review?t=${T}&job=${x.log_id}`, target: "_blank" },
         x.proposal.posted ? `📝 published ${x.proposal.posted}/${x.proposal.total}` : `📝 proposal (${x.proposal.pending} awaiting decision)`));
+      if (x.brief && x.log_id) actions.push(chatBtn(x.log_id));
       if (x.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: x.url }) }, "📄 Brief"));
       if (x.log_id) actions.push(h("a", { class: "btn", href: `/log?t=${T}&job=${x.log_id}`, target: "_blank" }, "📜 Run log"));
       return h("div", { class: "hrow" },
@@ -381,6 +389,31 @@ function renderHistory(m) {
         h("div", { class: "actions" }, actions));
     })));
   if (location.hash === "#history") { document.getElementById("history").scrollIntoView(); history.replaceState(null, "", location.pathname + location.search); }
+}
+
+// Worktrees: per-PR/MR checkouts kept for Codex reviews and the chat.
+let showTrees = false;
+try { showTrees = localStorage.getItem("juhas.trees") === "1"; } catch (_) {}
+function renderTrees(m) {
+  const box = $("#trees"); box.replaceChildren();
+  const ts = m.worktrees || [];
+  if (!ts.length) return;
+  box.append(h("button", { id: "treesToggle", onclick: () => {
+    showTrees = !showTrees;
+    try { localStorage.setItem("juhas.trees", showTrees ? "1" : "0"); } catch (_) {}
+    renderTrees(m);
+  } }, showTrees ? `▾ Hide worktrees (${ts.length})` : `🌳 Worktrees (${ts.length})`));
+  if (!showTrees) return;
+  box.append(h("section", { class: "history" },
+    h("h2", {}, `Worktrees — removed when the PR/MR is merged or closed, or after ${m.keep_for} unused`),
+    ts.map((w) => h("div", { class: "hrow" },
+      h("span", { class: "when" }, w.used),
+      h("div", { class: "title" },
+        h("div", {}, h("span", { class: "ref" }, `${w.repo} ${w.ref}`), " ", h("a", { href: w.url, target: "_blank", rel: "noopener" }, w.title)),
+        h("div", { class: "meta" }, h("span", {}, "at " + w.sha), h("span", {}, w.size), h("span", { title: w.path }, w.path), w.busy ? h("span", {}, "in use") : null)),
+      h("div", { class: "actions" },
+        h("a", { class: "btn", href: `/review?t=${T}&job=${w.id}#chat`, target: "_blank" }, "💬 Chat"),
+        h("button", { disabled: w.busy, title: "Delete the checkout (the chat puts it back when needed)", onclick: (ev) => { ev.target.disabled = true; act("worktree_remove", { url: w.id }); } }, "🗑 Remove"))))));
 }
 
 $("#tgZap").addEventListener("change", (e) => act("screen_effect", { on: e.target.checked }));
