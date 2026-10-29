@@ -215,3 +215,55 @@ esac`)
 		t.Errorf("want the GraphQL error: %+v", dec)
 	}
 }
+
+// Approve with the accepted comments: they go first (GitLab) or in the same
+// review (GitHub), and the approval follows.
+func TestPublishApproveWithComments(t *testing.T) {
+	log := fakeCLI(t, "glab", `
+case "$*" in
+  *"/approve"*) echo '{"id":1}';;
+  *"/notes"*) echo '{"id": 501}';;
+  *"/discussions"*) echo '{"notes":[{"id": 601, "position": {"new_line": 12}}]}';;
+  *"/diffs"*) echo '[{"old_path":"a.go","new_path":"a.go"}]';;
+  *) echo '{"diff_refs":{"base_sha":"b","head_sha":"h","start_sha":"s"}}';;
+esac`)
+	it := Item{Platform: GitLab, Repo: "gl.example/team/app", Number: 7, URL: "u", HeadSHA: "rev"}
+	sum, res, dec := Publish(context.Background(), it, "LGTM", []PostComment{{ID: "c1", File: "a.go", Line: 12, Body: "nit"}}, EventApprove)
+	if sum.Err != nil || res[0].Err != nil || dec.Err != nil || dec.URL != "u" {
+		t.Fatalf("sum %+v res %+v dec %+v", sum, res, dec)
+	}
+	b, _ := os.ReadFile(log)
+	calls := string(b)
+	if i, j := strings.Index(calls, "/discussions"), strings.Index(calls, "/approve"); i < 0 || j < i {
+		t.Errorf("the comment must land before the approval:\n%s", calls)
+	}
+
+	gh := fakeCLI(t, "gh", `echo '{"html_url":"rv"}'`)
+	it = Item{Platform: GitHub, Repo: "github.com/o/r", Number: 5, HeadSHA: "abc"}
+	sum, res, dec = Publish(context.Background(), it, "LGTM", []PostComment{{ID: "c1", File: "a.go", Line: 3, Body: "nit"}}, EventApprove)
+	if sum.Err != nil || res[0].URL != "rv" || dec.Err != nil {
+		t.Fatalf("sum %+v res %+v dec %+v", sum, res, dec)
+	}
+	b, _ = os.ReadFile(gh)
+	if c := string(b); strings.Count(c, "\n") != 1 || !strings.Contains(c, `"event":"APPROVE"`) || !strings.Contains(c, `"body":"nit"`) {
+		t.Errorf("one review with the approval and the comment:\n%s", c)
+	}
+}
+
+// GitLab: an approval is not sent when some of its comments failed.
+func TestPublishGitLabNoApprovalAfterFailedComment(t *testing.T) {
+	log := fakeCLI(t, "glab", `
+case "$*" in
+  *"/approve"*) echo '{"id":1}';;
+  *"/notes"*) echo 'glab: 500 Internal Server Error (HTTP 500)' >&2; exit 1;;
+  *) echo '{"diff_refs":{"base_sha":"b","head_sha":"h","start_sha":"s"}}';;
+esac`)
+	it := Item{Platform: GitLab, Repo: "gl.example/team/app", Number: 7, URL: "u", HeadSHA: "rev"}
+	sum, _, dec := Publish(context.Background(), it, "LGTM", nil, EventApprove)
+	if sum.Err == nil || dec.Err == nil {
+		t.Fatalf("sum %+v dec %+v", sum, dec)
+	}
+	if b, _ := os.ReadFile(log); strings.Contains(string(b), "/approve") {
+		t.Errorf("approved although the comment failed:\n%s", b)
+	}
+}

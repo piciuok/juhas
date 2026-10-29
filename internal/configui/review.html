@@ -78,8 +78,8 @@ footer select { font: inherit; font-size: 13px; padding: 4px 8px; border-radius:
   <span id="saved" class="count" style="margin-right:0"></span>
   <select id="event" title="What to send with the comments">
     <option value="comment">Comment only</option>
-    <option value="approve">✓ Approve</option>
-    <option value="request_changes">✕ Request changes</option>
+    <option value="approve">✓ Approve (+ accepted comments)</option>
+    <option value="request_changes">✕ Request changes (+ accepted comments)</option>
   </select>
   <button class="primary" id="publish" disabled>🚀 Publish accepted</button>
 </footer>
@@ -134,8 +134,13 @@ function counts() {
   if (publishing) return; // the button stays "Publishing…" until the server answers
   const ev = $("#event").value;
   $("#publish").disabled = acc === 0 && ev === "comment";
-  const what = { comment: "", approve: " + approve", request_changes: " + request changes" }[ev];
-  $("#publish").textContent = acc ? `🚀 Publish accepted (${acc})${what}` : ev === "approve" ? "✓ Approve" : `🚀 Publish accepted${what}`;
+  const n = acc === 1 ? "1 accepted comment" : `${acc} accepted comments`;
+  $("#publish").textContent = ev === "approve" ? (acc ? `✓ Approve with ${n}` : "✓ Approve")
+    : ev === "request_changes" ? (acc ? `✕ Request changes with ${n}` : "✕ Request changes")
+    : acc ? `🚀 Publish ${n}` : "🚀 Publish accepted";
+  $("#publish").title = ev === "comment" ? "Posts the accepted comments" : acc
+    ? "Posts the accepted comments first, then sends the decision — not sent if a comment fails"
+    : "Sends only the decision: accept comments above to send them with it";
 }
 
 // File preview: the diff of the file a comment is about, or the whole file at

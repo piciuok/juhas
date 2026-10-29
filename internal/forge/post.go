@@ -87,6 +87,16 @@ func Publish(ctx context.Context, it Item, summary string, comments []PostCommen
 		return publishGitHub(ctx, env, it, summary, comments, event)
 	}
 	sum, res = publishGitLab(ctx, env, it, summary, comments)
+	// a decision goes with its comments: not without the ones that failed
+	failed := 0
+	for _, r := range append([]PostResult{sum}, res...) {
+		if r.Err != nil {
+			failed++
+		}
+	}
+	if failed > 0 && event != EventComment && event != "" {
+		return sum, res, PostResult{ID: "decision", Err: fmt.Errorf("not sent: %d of the comments failed to post — check them and publish again", failed)}
+	}
 	// after the comments, so the approval or request lands last
 	switch event {
 	case EventApprove:
