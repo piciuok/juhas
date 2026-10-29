@@ -204,7 +204,7 @@ func (a *App) PanelModel() any {
 	snap, _ = split(full, st)
 	m.History = history(st, full)
 	m.PolledAt = snap.At.Format("15:04:05")
-	m.Total = len(snap.Entries)
+	m.Total = ready(snap.Entries)
 	m.Urgent = snap.UrgentCount()
 	m.Errors = append(m.Errors, snap.Errors...)
 

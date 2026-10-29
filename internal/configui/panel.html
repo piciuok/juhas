@@ -222,15 +222,32 @@ async function refresh(force) {
   let m;
   try { m = await api("/api/panel"); }
   catch (e) { notice("Can't reach Juhas: " + e.message); schedule(5000); return; }
-  const json = JSON.stringify(m);
-  if (force || json !== lastJSON) render(m);
-  lastJSON = json;
+  render(m, force);
   schedule(m.running || m.waiting || m.polling ? 1000 : 2500);
 }
 let timer = null;
 function schedule(ms) { clearTimeout(timer); timer = setTimeout(refresh, ms); }
 
-function render(m) {
+// Each part of the page is redrawn only when its own data changed, and then
+// whole, in one go: a poll that only moves the "checked" time or a worktree's
+// "used" does not rebuild (and fold, or jump) the PR/MR list.
+let last = {};
+function render(m, force) {
+  const parts = {
+    head: JSON.stringify({ ...m, repos: null, history: null, worktrees: null }),
+    repos: JSON.stringify([m.repos, m.total, !!m.polled_at]),
+    history: JSON.stringify(m.history),
+    trees: JSON.stringify([m.worktrees, m.keep_for]),
+  };
+  const changed = (k) => force || parts[k] !== last[k];
+  if (changed("head")) renderHead(m);
+  if (changed("repos")) renderRepos(m);
+  if (changed("history")) renderHistory(m);
+  if (changed("trees")) renderTrees(m);
+  last = parts;
+}
+
+function renderHead(m) {
   const urgentLive = m.unacked > 0;
   setIcon(urgentLive ? ICON_BOLT : ICON_LENS);
   document.title = (urgentLive ? `⚡${m.unacked} · ` : "") + `(${m.total}) Juhas — Panel`;
@@ -251,14 +268,16 @@ function render(m) {
   $("#tgZap").checked = m.screen_effect;
   $("#tgAuto").checked = m.autostart;
   $("#errors").replaceChildren(...(m.errors.length ? [h("div", { class: "errors" }, "⚠ Fetch errors: ", m.errors.join(" · "))] : []));
-  const repos = $("#repos"); repos.replaceChildren();
-  renderHistory(m);
-  renderTrees(m);
-  if (!m.total) repos.append(h("div", { class: "empty" }, m.polled_at ? "✓ Nothing is waiting for your review" : "First check in progress…"));
+}
+
+function renderRepos(m) {
+  const list = [];
+  if (!m.total) list.push(h("div", { class: "empty" }, m.polled_at ? "✓ Nothing is waiting for your review" : "First check in progress…"));
   for (const r of m.repos || []) {
     if (!r.entries.length && !r.pinned) continue;
-    repos.append(repoSection(r));
+    list.push(repoSection(r));
   }
+  $("#repos").replaceChildren(...list); // built first, swapped in at once
 }
 
 // open: repos whose folded "Show all" is expanded (kept across refreshes)
@@ -266,27 +285,35 @@ const open = new Set();
 try { for (const k of JSON.parse(localStorage.getItem("juhas.open") || "[]")) open.add(k); } catch (_) {}
 const saveOpen = () => { try { localStorage.setItem("juhas.open", JSON.stringify([...open])); } catch (_) {} };
 
+// repoSection: what waits for you and is ready on top; drafts (yours or
+// not) and, unless the repo lists them inline, the others go under the fold.
 function repoSection(r) {
+  const ready = r.entries.filter((e) => !e.draft), myDrafts = r.entries.filter((e) => e.draft);
   const others = r.all.filter((o) => !o.queued);
+  const inline = r.inline ? others.filter((o) => !o.draft) : [];
+  const folded = r.inline ? others.filter((o) => o.draft) : others;
+  const drafts = myDrafts.length + folded.filter((o) => o.draft).length;
   const tools = [];
-  if (r.all.length) tools.push(h("button", { title: r.inline ? "Fold the PR/MRs not waiting for you under “Show all”, so the list stays short" : "List the PR/MRs not waiting for you right here",
+  if (r.all.length) tools.push(h("button", { title: r.inline ? "Fold the PR/MRs not waiting for you under “Show all”, so the list stays short" : "List the PR/MRs not waiting for you right here (drafts stay folded)",
     onclick: () => act("show_all", { url: r.key, on: !r.inline }) }, r.inline ? "↕ Fold the others" : "↕ List the others"));
   tools.push(h("button", { title: r.pinned ? "Show the repo only when something waits for you" : "Always show the repo, with all its PR/MRs",
     onclick: () => act(r.pinned ? "unpin" : "pin", { url: r.key }) }, r.pinned ? "📌 Unpin" : "📌 Pin"));
   const sec = h("section", { class: "repo" },
     h("div", { class: "repo-head" },
       h("a", { href: r.list_url, target: "_blank", rel: "noopener" }, (r.pinned ? "📌 " : "") + r.short),
-      h("span", { class: "muted" }, [r.open >= 0 ? `${r.open} open` : null, `${r.queued} for me`, r.mode].filter(Boolean).join(" · ")),
+      h("span", { class: "muted" }, [r.open >= 0 ? `${r.open} open` : null, `${ready.length} for me`, myDrafts.length ? `${myDrafts.length} draft` : null, r.mode].filter(Boolean).join(" · ")),
       r.urgent ? h("span", { class: "pill urgent" }, `⚡ ${r.urgent}`) : null,
       h("span", { class: "tools" }, tools)),
-    r.entries.map(entryRow));
-  if (!r.entries.length) sec.append(h("div", { class: "none" }, "✓ Nothing here waits for you" + (r.open === 0 ? " — no open PR/MRs" : "")));
-  if (!others.length) return sec;
-  if (r.inline) { sec.append(...others.map(otherRow)); return sec; }
+    ready.map(entryRow));
+  if (!ready.length) sec.append(h("div", { class: "none" }, "✓ Nothing ready waits for you" + (r.open === 0 ? " — no open PR/MRs" : "")));
+  sec.append(...inline.map(otherRow));
+  const n = myDrafts.length + folded.length;
+  if (!n) return sec;
   const shown = open.has(r.key);
+  const what = r.inline ? `📝 Show drafts — ${n}` : `📋 Show all PR/MRs — ${n} more` + (drafts ? ` (${drafts} draft)` : "") + ", not ready for you";
   sec.append(h("button", { class: "others-toggle", onclick: () => { shown ? open.delete(r.key) : open.add(r.key); saveOpen(); refresh(true); } },
-    shown ? `▾ Hide the others (${others.length})` : `📋 Show all PR/MRs — ${others.length} more, not waiting for you`));
-  if (shown) sec.append(...others.map(otherRow));
+    shown ? `▾ Hide (${n})` : what));
+  if (shown) sec.append(...myDrafts.map(entryRow), ...folded.map(otherRow));
   return sec;
 }
 

@@ -61,7 +61,8 @@ type App struct {
 	awakeUntil time.Time // "Work now": working hours ignored until then
 	sleeping   bool      // off hours, as last drawn
 	menuSig    string
-	limits     limitsLine // cached: Codex is read from its session files
+	headItem   *systray.MenuItem // the first line; its "checked" time changes without a rebuild
+	limits     limitsLine        // cached: Codex is read from its session files
 	ui         *configui.Server
 	sweeping   sync.Mutex // one worktree sweep at a time
 	uiURL      string
@@ -584,7 +585,7 @@ func (a *App) setIcon() {
 	}
 	if a.snap != nil {
 		active, _ := split(a.snap, st)
-		s.Queued = len(active.Entries)
+		s.Queued = ready(active.Entries) // drafts wait under "Show all", not on the icon
 		s.Urgent = active.UrgentCount()
 		s.Decide = len(awaitingDecision(active, st))
 		s.Problem = len(a.snap.Errors) > 0
@@ -648,6 +649,17 @@ func (a *App) setIcon() {
 	}
 }
 
+// ready counts what waits for me and is not a draft.
+func ready(es []queue.Entry) int {
+	n := 0
+	for _, e := range es {
+		if !e.Draft {
+			n++
+		}
+	}
+	return n
+}
+
 // --- menu ----------------------------------------------------------------
 
 // rebuild recreates the whole menu from the snapshot and state.
@@ -660,16 +672,7 @@ func (a *App) rebuild() {
 	lim := a.limits.get()
 	a.mu.Lock()
 	snap, rep, cfg, polling, lastErr, runner := a.snap, a.report, a.cfg, a.polling, a.lastErr, a.runner
-	sig := menuSignature(snap, st, rep, polling, lastErr, runner) + fmt.Sprintf("|upd:%s:%v|lim:%s|off:%v:%s", u.Latest, u.Installing, lim.text, a.offHoursLocked(), a.awakeUntil)
-	if sig == a.menuSig {
-		a.mu.Unlock()
-		return // unchanged: do not close a menu the user may have open
-	}
-	a.menuSig = sig
-	a.mu.Unlock()
-
-	systray.ResetMenu()
-
+	sig := menuSignature(snap, st, rep, lastErr, runner) + fmt.Sprintf("|upd:%s:%v|lim:%s|off:%v:%s", u.Latest, u.Installing, lim.text, a.offHoursLocked(), a.awakeUntil)
 	full := snap
 	snap, history := split(full, st)
 	head := "Juhas"
@@ -677,12 +680,29 @@ func (a *App) rebuild() {
 	case polling && snap == nil:
 		head += " — checking…"
 	case snap != nil:
-		head += fmt.Sprintf(" — %d to review · checked %s", len(snap.Entries), snap.At.Format("15:04"))
+		head += fmt.Sprintf(" — %d to review · checked %s", ready(snap.Entries), snap.At.Format("15:04"))
 		if polling {
 			head += " ⟳"
 		}
 	}
-	systray.AddMenuItem(head, "").Disable()
+	if sig == a.menuSig && a.headItem != nil {
+		hi := a.headItem
+		a.mu.Unlock()
+		// the list is the same: only the first line moves, so a menu the
+		// user has open stays open and nothing folds
+		hi.SetTitle(head)
+		return
+	}
+	a.menuSig = sig
+	a.mu.Unlock()
+
+	systray.ResetMenu()
+
+	hi := systray.AddMenuItem(head, "")
+	hi.Disable()
+	a.mu.Lock()
+	a.headItem = hi
+	a.mu.Unlock()
 	a.addHours(cfg)
 	switch {
 	case u.Installing:
@@ -803,22 +823,37 @@ func (a *App) addRepo(r queue.RepoStat, entries []queue.Entry, st *state.State, 
 	if r.Pinned {
 		icon = "📌"
 	}
-	label := fmt.Sprintf("%s %s — %s%d for me", icon, app.ShortRepo(r.Key), open, r.Queued)
+	// drafts, mine too, go under "Show all": on top only what is ready
+	var drafts []queue.Entry
+	ready := 0
+	for _, e := range entries {
+		if e.Draft {
+			drafts = append(drafts, e)
+		} else {
+			ready++
+		}
+	}
+	label := fmt.Sprintf("%s %s — %s%d for me", icon, app.ShortRepo(r.Key), open, ready)
+	if len(drafts) > 0 {
+		label += fmt.Sprintf(" · %d draft", len(drafts))
+	}
 	if r.Urgent > 0 {
 		label += fmt.Sprintf(" · 🔴%d", r.Urgent)
 	}
 	item(nil, label, func() { _ = platform.Open(listURL(r.Key, entries)) })
 	for _, e := range entries {
-		a.addEntry(e, st.Job(e.URL), cfg, runner)
+		if !e.Draft {
+			a.addEntry(e, st.Job(e.URL), cfg, runner)
+		}
 	}
 	queued := map[string]bool{}
 	for _, e := range entries {
 		queued[e.URL] = true
 	}
 	key := r.Key
-	if r.Inline { // show_all: inline — the others right here, not folded
+	if r.Inline { // show_all: inline — the others right here, not folded (drafts stay folded)
 		for _, o := range r.All {
-			if queued[o.URL] {
+			if queued[o.URL] || o.Draft {
 				continue
 			}
 			url := o.URL
@@ -832,9 +867,17 @@ func (a *App) addRepo(r queue.RepoStat, entries []queue.Entry, st *state.State, 
 	if len(r.All) == 0 && r.Open == 0 {
 		all.AddSubMenuItem("✓ No open PR/MRs", "").Disable()
 	}
+	listed := map[string]bool{}
 	for _, o := range r.All {
 		url := o.URL
+		listed[url] = true
 		item(all, allLabel(o, queued[o.URL]), func() { _ = platform.Open(url) })
+	}
+	for _, e := range drafts { // the full list was not fetched
+		if !listed[e.URL] {
+			url := e.URL
+			item(all, allLabel(queue.Open{Ref: e.Ref(), Title: e.Title, Author: e.Author, URL: e.URL, Draft: true}, true), func() { _ = platform.Open(url) })
+		}
 	}
 	all.AddSeparator()
 	item(all, "🌐 Open the list in the browser", func() { _ = platform.Open(listURL(key, entries)) })
@@ -1182,14 +1225,17 @@ func (a *App) saveMapping(key, dir string) {
 }
 
 // menuSignature captures everything the menu shows.
-func menuSignature(snap *queue.Snapshot, st *state.State, rep *doctor.Report, polling bool, lastErr string, runner *review.Runner) string {
+// menuSignature is what the menu shows, except the first line (the poll's
+// time and ⟳), which is updated in place: a poll that changes nothing else
+// must not rebuild, and so close, an open menu.
+func menuSignature(snap *queue.Snapshot, st *state.State, rep *doctor.Report, lastErr string, runner *review.Runner) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%v|%s|%v|", polling, lastErr, platform.AutostartEnabled())
+	fmt.Fprintf(&b, "%s|%v|", lastErr, platform.AutostartEnabled())
 	if rep != nil {
 		fmt.Fprintf(&b, "doc%d/%d|", rep.Count(doctor.Fail), rep.Count(doctor.Warn))
 	}
 	if snap != nil {
-		fmt.Fprintf(&b, "%s|%d|", snap.At.Format("15:04"), len(snap.Errors))
+		fmt.Fprintf(&b, "snap|%d|", len(snap.Errors))
 		for _, r := range snap.Repos {
 			fmt.Fprintf(&b, "%s:%d:%d:%d:%v:%v|", r.Key, r.Open, r.Queued, r.Urgent, r.Pinned, r.Inline)
 			for _, o := range r.All {
@@ -1197,7 +1243,7 @@ func menuSignature(snap *queue.Snapshot, st *state.State, rep *doctor.Report, po
 			}
 		}
 		for _, e := range snap.Entries {
-			fmt.Fprintf(&b, "%s:%s:%s:%v:%s:%v:%s|", e.URL, e.Title, e.HeadSHA, e.Urgent, e.PathGuess, runner != nil && runner.Busy(e.URL), e.Files.String())
+			fmt.Fprintf(&b, "%s:%s:%s:%v:%v:%s:%v:%s|", e.URL, e.Title, e.HeadSHA, e.Draft, e.Urgent, e.PathGuess, runner != nil && runner.Busy(e.URL), e.Files.String())
 			if j := st.Job(e.URL); j != nil {
 				fmt.Fprintf(&b, "%s:%s:%s:%v|", j.Status, j.Brief, j.BriefSHA, st.Acked(e.URL))
 				if pr, ok := proposalOf(j); ok {
