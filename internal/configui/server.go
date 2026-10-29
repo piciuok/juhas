@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -647,6 +648,25 @@ type dirEntry struct {
 	Key  string `json:"key,omitempty"` // host/path of origin, for clones
 }
 
+// protected: folders macOS guards with a consent prompt (TCC). The picker
+// lists them but does not look inside until you open one.
+func protected(dir string) bool {
+	if runtime.GOOS != "darwin" {
+		return false
+	}
+	home := config.Home()
+	switch filepath.Dir(dir) {
+	case home:
+		switch filepath.Base(dir) {
+		case "Desktop", "Documents", "Downloads", "Music", "Movies", "Pictures", "Library", "Public":
+			return true
+		}
+	case "/Volumes", "/Network":
+		return true
+	}
+	return dir == "/Volumes" || dir == "/Network"
+}
+
 // ls lists the subdirectories of path (default ~) for the folder picker:
 // a browser cannot hand a real filesystem path to the page, so the page
 // walks the tree through the app instead.
@@ -678,6 +698,12 @@ func (s *Server) ls(w http.ResponseWriter, r *http.Request) (any, error) {
 			}
 		}
 		d := dirEntry{Name: name, Path: config.Contract(full)}
+		if protected(full) {
+			// looking inside asks macOS for consent in Juhas's name (Music,
+			// Photos, Documents…, network volumes): only when you open it
+			dirs = append(dirs, d)
+			continue
+		}
 		if _, err := os.Stat(filepath.Join(full, ".git")); err == nil {
 			d.Git = true
 			if out, err := exec.CommandContext(r.Context(), "git", "-C", full, "remote", "get-url", "origin").Output(); err == nil {
