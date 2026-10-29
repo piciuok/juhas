@@ -34,8 +34,62 @@ type Runner struct {
 	cancels map[string]context.CancelFunc
 	running map[string]forge.Item // in progress
 	waiting []forge.Item          // queued, in order
+	args    map[string]Queued     // how each queued or running one was asked for
 	held    bool                  // no new reviews (an update is about to restart the app)
+	paused  chan struct{}         // non-nil: queued reviews wait (closed on resume)
 	wg      sync.WaitGroup
+}
+
+// Queued is a review waiting in the queue, as Enqueue was called.
+type Queued struct {
+	Item  forge.Item `json:"item"`
+	Dir   string     `json:"dir"`
+	Agent string     `json:"agent"`
+}
+
+// Pause stops (or resumes) starting queued reviews: running ones go on,
+// new ones are still queued. An update install waits on it for the running
+// ones only, and carries the queue over the restart.
+func (r *Runner) Pause(on bool) {
+	r.init()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	switch {
+	case on && r.paused == nil:
+		r.paused = make(chan struct{})
+	case !on && r.paused != nil:
+		close(r.paused)
+		r.paused = nil
+	}
+}
+
+// Waiting lists the queued reviews that have not started, in order.
+func (r *Runner) Waiting() []Queued {
+	r.init()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]Queued, 0, len(r.waiting))
+	for _, w := range r.waiting {
+		out = append(out, r.args[w.URL])
+	}
+	return out
+}
+
+// gate waits while the queue is paused; false when ctx ends first.
+func (r *Runner) gate(ctx context.Context) bool {
+	for {
+		r.mu.Lock()
+		ch := r.paused
+		r.mu.Unlock()
+		if ch == nil {
+			return true
+		}
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			return false
+		}
+	}
 }
 
 // Hold stops (or resumes) accepting new reviews; running ones go on.
@@ -58,6 +112,7 @@ func (r *Runner) init() {
 		r.sem = make(chan struct{}, n)
 		r.cancels = map[string]context.CancelFunc{}
 		r.running = map[string]forge.Item{}
+		r.args = map[string]Queued{}
 	})
 }
 
@@ -141,6 +196,7 @@ func (r *Runner) Enqueue(it forge.Item, dir, agent string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	r.cancels[it.URL] = cancel
 	r.waiting = append(r.waiting, it)
+	r.args[it.URL] = Queued{Item: it, Dir: dir, Agent: agent}
 	r.mu.Unlock()
 
 	logPath := LogPath(r.Store, it.URL)
@@ -157,15 +213,32 @@ func (r *Runner) Enqueue(it forge.Item, dir, agent string) {
 		defer func() {
 			r.mu.Lock()
 			delete(r.cancels, it.URL)
+			delete(r.args, it.URL)
 			r.mu.Unlock()
 			cancel()
 		}()
-		select {
-		case r.sem <- struct{}{}:
-		case <-ctx.Done():
+		cancelled := func() {
 			r.dequeue(it.URL)
 			r.update(it, func(j *state.Job) { j.Status = state.Failed; j.Error = "cancelled while queued" })
-			return
+		}
+		for {
+			if !r.gate(ctx) {
+				cancelled()
+				return
+			}
+			select {
+			case r.sem <- struct{}{}:
+			case <-ctx.Done():
+				cancelled()
+				return
+			}
+			r.mu.Lock()
+			again := r.paused != nil // paused while it waited for the slot
+			r.mu.Unlock()
+			if !again {
+				break
+			}
+			<-r.sem
 		}
 		r.dequeue(it.URL)
 		r.mu.Lock()

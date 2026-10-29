@@ -207,7 +207,8 @@ configuration reference.
   3. starts the new version as a fresh process (through launchd under the LaunchAgent), which then confirms
      the update in a dialog.
 
-  First it pauses new reviews and waits for running ones and open questions.
+  First the install is pending: queued reviews do not start, the running ones finish (and open questions get
+  an answer), then it installs and restarts — and the queue carries over and resumes in the new version.
 - **Options:** `prerelease` (semver ordering: rc.9 < rc.10) and `auto_install`. `juhas update [--check] [--pre] [--force]` does the same from a shell.
 - **Builds that are not release tags** are never replaced automatically. A symlinked binary (e.g. from a
   package manager) is not overwritten either.

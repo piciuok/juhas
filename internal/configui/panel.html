@@ -261,7 +261,7 @@ function renderHead(m) {
     m.hours && m.hours.off ? h("span", { class: "pill", title: "Working hours " + m.hours.label + ": no checks, questions or notifications outside them" }, `🛏 off hours — back at ${m.hours.change}`) : null,
     m.hours && m.hours.off ? h("button", { title: "Check and notify as in working hours, for one hour", onclick: () => act("wake") }, "☀️ Work now (1 h)") : null,
     m.hours && m.hours.awake ? h("button", { title: "Back to off hours", onclick: () => act("sleep") }, `☀️ overtime until ${m.hours.awake} — 🛏 stop`) : null,
-    m.update && m.update.installing ? h("span", { class: "pill live" }, `⬆ installing ${m.update.latest}…`) : null,
+    m.update && m.update.installing ? h("span", { class: "pill live", title: "Queued reviews wait and resume after the restart" }, m.running ? `⬆ ${m.update.latest} pending — installs after the running review` : `⬆ installing ${m.update.latest}…`) : null,
     m.update && m.update.latest && !m.update.installing ? h("button", { class: "primary", title: `You have ${m.update.current}`, onclick: () => act("update") }, `⬆ Update to ${m.update.latest}`) : null,
     m.update && m.update.latest && !m.update.installing ? h("a", { class: "btn", href: m.update.url, target: "_blank", rel: "noopener" }, "What's new") : null,
     m.unacked ? h("button", { class: "volt", onclick: () => act("ack") }, `🔕 Acknowledge urgent (${m.unacked})`) : null].filter(Boolean));

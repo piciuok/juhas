@@ -2,13 +2,16 @@ package tray
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"fyne.io/systray"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/piciuok/juhas/internal/platform"
+	"github.com/piciuok/juhas/internal/review"
 	"github.com/piciuok/juhas/internal/state"
 	"github.com/piciuok/juhas/internal/update"
 )
@@ -48,6 +51,7 @@ func (a *App) updateLoop() {
 	a.mu.Unlock()
 	if from != "" {
 		_ = update.SaveStatus(a.store.UpdatePath(), st)
+		a.saveQueue()
 		if from != version {
 			// the icon went away for the restart: say it is back and done
 			a.logger.Printf("running %s (updated from %s)", version, from)
@@ -158,11 +162,14 @@ func (a *App) installUpdate() {
 		fail(errors.New("no newer release to install"))
 		return
 	}
-	// no new reviews from here on: one started now would be cut off by the restart
-	a.holdReviews(true)
+	// pending update install: queued reviews do not start (one started now
+	// would be cut off by the restart) — they resume after it; only the
+	// running ones are waited for
+	a.pauseReviews(true)
+	a.logger.Printf("update to %s: pending install — waiting for running reviews, the queue resumes after the restart", tag)
 	failHeld := fail
-	fail = func(err error) { a.holdReviews(false); failHeld(err) }
-	for a.reviewsActive() || a.questionsOpen() {
+	fail = func(err error) { a.pauseReviews(false); failHeld(err) }
+	for a.reviewsRunning() || a.questionsOpen() {
 		select {
 		case <-a.quit:
 			return
@@ -188,7 +195,7 @@ func (a *App) installUpdate() {
 		fail(err)
 		return
 	}
-	for a.reviewsActive() || a.questionsOpen() { // one may have slipped in before the hold
+	for a.reviewsRunning() || a.questionsOpen() { // one may have slipped in before the pause
 		select {
 		case <-a.quit:
 			return
@@ -214,13 +221,70 @@ func (a *App) installUpdate() {
 	}
 }
 
-func (a *App) holdReviews(on bool) {
+func (a *App) pauseReviews(on bool) {
 	a.mu.Lock()
 	r := a.runner
 	a.mu.Unlock()
 	if r != nil {
-		r.Hold(on)
+		r.Pause(on)
 	}
+}
+
+// reviewsRunning: a review is in progress (queued ones wait for the restart).
+func (a *App) reviewsRunning() bool {
+	a.mu.Lock()
+	r := a.runner
+	a.mu.Unlock()
+	if r == nil {
+		return false
+	}
+	run, _ := r.Queue()
+	return len(run) > 0
+}
+
+// queueFile carries the reviews still queued over an update's restart.
+func (a *App) queueFile() string { return filepath.Join(filepath.Dir(a.store.Path()), "queue.json") }
+
+func (a *App) saveQueue() {
+	a.mu.Lock()
+	r := a.runner
+	a.mu.Unlock()
+	if r == nil {
+		return
+	}
+	q := r.Waiting()
+	if len(q) == 0 {
+		return
+	}
+	b, _ := json.Marshal(q)
+	if err := os.WriteFile(a.queueFile(), b, 0o600); err != nil {
+		a.logger.Printf("update: saving the queue: %v", err)
+		return
+	}
+	a.logger.Printf("update: %d queued reviews carried over the restart", len(q))
+}
+
+// resumeQueue queues again what an update's restart carried over.
+func (a *App) resumeQueue() {
+	b, err := os.ReadFile(a.queueFile())
+	if err != nil {
+		return
+	}
+	_ = os.Remove(a.queueFile())
+	var q []review.Queued
+	if json.Unmarshal(b, &q) != nil {
+		return
+	}
+	a.mu.Lock()
+	r := a.runner
+	a.mu.Unlock()
+	if r == nil {
+		return
+	}
+	for _, x := range q {
+		r.Enqueue(x.Item, x.Dir, x.Agent)
+	}
+	a.logger.Printf("resumed %d queued reviews after the update", len(q))
 }
 
 // questionsOpen: a "Review it?" dialog is waiting for an answer, which a
@@ -236,16 +300,4 @@ func (a *App) questionsOpen() bool {
 		}
 	}
 	return false
-}
-
-// reviewsActive: a review is running or queued.
-func (a *App) reviewsActive() bool {
-	a.mu.Lock()
-	r := a.runner
-	a.mu.Unlock()
-	if r == nil {
-		return false
-	}
-	run, wait := r.Queue()
-	return len(run)+len(wait) > 0
 }

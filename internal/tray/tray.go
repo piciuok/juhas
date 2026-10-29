@@ -180,6 +180,7 @@ func (a *App) onReady() {
 	go a.autoMapLoop()
 	go a.updateLoop()
 	go func() { _, _, _ = a.web() }() // serve the panel from the start
+	go a.resumeQueue()
 }
 
 // autoMapLoop maps new clones from scan_dirs into the config file, at start
@@ -706,7 +707,7 @@ func (a *App) rebuild() {
 	a.addHours(cfg)
 	switch {
 	case u.Installing:
-		systray.AddMenuItem("⬆ Installing "+u.Latest+" (waits for running reviews)…", "").Disable()
+		systray.AddMenuItem("⬆ Update "+u.Latest+" pending: after the running review, then the queue resumes", "").Disable()
 	case u.Latest != "":
 		item(nil, fmt.Sprintf("⬆ Update to %s (you have %s)", u.Latest, u.Current), func() { go a.installUpdate() })
 		item(nil, "    📰 What's new in "+u.Latest, func() { _ = platform.Open(u.URL) })
