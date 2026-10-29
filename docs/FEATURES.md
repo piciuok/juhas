@@ -106,7 +106,8 @@ configuration reference.
   - GitLab: diff discussions on the reviewed MR version, including unchanged context lines. A line outside
     the diff becomes a general note with its `file:line`.
 - **Approve or request changes** with the publish: pick *Comment only*, *Approve* or *Request changes* next
-  to the button. GitHub sends it as the review event; GitLab approves the reviewed commit (refused if the head
+  to the button. The accepted comments go with the decision (*✓ Approve with 2 accepted comments*): first
+  the comments, then the decision, which is not sent if a comment fails to post. GitHub sends it as the review event; GitLab approves the reviewed commit (refused if the head
   moved) and marks "changes requested" (17.2+). A change request needs a general comment that says why.
 - **Verdict rules** (`review.verdict_rules`, editable in Settings): how the agent picks approve / request
   changes / needs discussion. By default: any BLOCK → request changes, only WARN/INFO → approve.
@@ -117,6 +118,29 @@ configuration reference.
   - A timeout or server error is reported rather than retried, so nothing is posted twice.
   - Empty comments are refused.
 - **A blinking ❓ next to the icon** and a Panel badge remind you of proposals waiting for a decision.
+
+## Chat about the review
+
+- **A chat panel on the right of the proposal page** (also Panel → *💬 Chat*, and for reviews with no
+  proposed comments). Ask why something is a blocker, whether a test covers it, what a fix would look like.
+- **Continues the review's own session**, so the agent remembers the diff and the code it read: Claude forks
+  it (`--fork-session`, the review session stays as it was), Codex resumes its thread in the kept worktree.
+  Without a saved session (older reviews) it starts a new one seeded with the brief and your decisions on the
+  proposal. After a new review, the chat continues from that one.
+- **Read-only like the review:** the same guard hook (Claude) or OS sandbox (Codex), at most
+  `chat.max_turns` steps per question, *⏹ Stop* any time, *↺ New* to start over.
+- **Suggested comments** come as cards with *➕ Add to the proposal*: they land there as pending, for you to
+  accept and publish. Nothing goes out from the chat itself.
+- **Local:** the conversation is stored in `~/.local/state/juhas/chats/`.
+
+## Worktrees
+
+- **One worktree per PR/MR** (in the user cache folder), used by Codex reviews and the chat. A new review moves
+  it to the new head.
+- **Cleaned up on their own:** when the PR/MR is merged or closed (checked when it leaves the lists, at most
+  hourly), or after `worktrees.keep_for` without use (a week by default).
+- **Panel → 🌳 Worktrees** lists them with size and last use; *🗑 Remove* deletes one (the chat puts it back
+  when needed).
 
 ## Briefs and logs
 

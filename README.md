@@ -21,7 +21,10 @@ comments; you accept, edit or reject each one, and Juhas publishes the accepted 
 - **New PR/MR** → "Run AI review?" with a choice of **Claude / Codex**, *Later* or *Skip*.
 - **Human in the loop** — a blinking, sparking **❓** next to the icon reminds you of proposals awaiting your decision;
   each comment can show its file's diff or the whole file, with the line highlighted, right on the proposal page.
-  Publish the accepted comments alone, or with an **approve** or **request changes**.
+  Publish the accepted comments alone, or together with an **approve** or **request changes**.
+- **Chat about the review** — a panel on the right of the proposal page: ask the agent follow-up questions about
+  the PR/MR. It continues the review's own session (it remembers what it read), stays read-only, and a comment it
+  suggests goes into the proposal with one click.
 - **Read-only guard** — reviews may read anything (gh/glab, Jira or docs through MCP) but not push, comment or edit;
   tune it with exceptions or turn it off per repo.
 - **Live run log**, briefs as Markdown files, and a browser **Panel** that stays open while you click.
@@ -210,7 +213,8 @@ Full example: [`config.example.json`](config.example.json).
    `review.guard: "off"` turns all of this off: the agent may then do whatever its tools allow, while Juhas still
    publishes only the comments you accept. Edit and Write are disabled unless the guard is off.
 3. **Codex**: Juhas itself fetches the description with the discussion, the diff and the CI status, and checks out
-   a detached worktree at the head SHA. `codex exec --sandbox read-only` then works **without network and
+   a detached worktree at the head SHA (kept for the chat and the next review; removed when the PR/MR is merged
+   or closed, or after `worktrees.keep_for` unused, a week by default). `codex exec --sandbox read-only` then works **without network and
    without write access**, enforced by the OS sandbox rather than a deny-list. A repo skill is passed in as the
    procedure to follow.
 4. Progress goes to a run log (Panel / menu → *Live view*); the brief lands in `briefs_dir`.
@@ -219,11 +223,18 @@ Full example: [`config.example.json`](config.example.json).
    account, as diff discussions on GitLab and as a review on GitHub. A line outside the diff goes into the
    general comment with its `file:line`. If new commits arrived since the review, Juhas warns you first.
    Next to *Publish* you pick what goes with the comments: comment only, **approve** or **request changes**
-   (GitLab: approval of the reviewed commit, and "changes requested" on 17.2+). `review.publish_event:
+   (GitLab: approval of the reviewed commit, and "changes requested" on 17.2+). With a decision, the accepted
+   comments go first (GitHub: in the same review) and the decision is not sent if any of them fails. `review.publish_event:
    from_verdict` preselects the agent's verdict; the default `comment` preselects comment only. The agent
    picks its verdict by `review.verdict_rules` (by default: any BLOCK → request changes, only WARN/INFO →
    approve), editable in Settings.
    **The agent itself never publishes anything.**
+6. **Chat.** On the proposal page (or Panel → *💬 Chat*) you can talk the review over. The first question forks
+   the review session (Claude: `--resume --fork-session`; Codex: `codex exec resume` in the kept worktree), so
+   the agent still has the diff and the code it read; an older review without a saved session starts a new one
+   from the brief and the proposal. The chat runs under the same guard and sandbox as the review, at most
+   `chat.max_turns` steps per question, and is stored locally in `~/.local/state/juhas/chats`. When the agent
+   suggests a comment, *➕ Add to the proposal* puts it there as pending.
 
 Worth knowing:
 

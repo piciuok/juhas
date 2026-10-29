@@ -12,6 +12,8 @@
   "github": [{ "host": "github.com" }],
   "gitlab": [{ "host": "gitlab.example.com" }],
   "updates": { "check": true, "interval": "24h", "prerelease": false, "auto_install": false },
+  "chat": { "max_turns": 30 },
+  "worktrees": { "keep_for": "168h" },
   "working_hours": { "enabled": false, "from": "08:00", "to": "16:00", "days": ["mon", "tue", "wed", "thu", "fri"] },
   "defaults": {
     "agent": "claude",
