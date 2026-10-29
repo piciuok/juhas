@@ -16,6 +16,10 @@ configuration reference.
   menu with `show_all: inline` (toggle ↕ per repo). The Panel finds projects to pin among the config, the scanned
   clones and the projects you are a member of, or takes a pasted project/MR URL, and can review a PR/MR from the
   full list although nobody asked you.
+- **Ready first:** the main list, the icon and the "to review" count hold what waits for you and is not a draft.
+  Drafts, yours too, are folded under *Show all* (under *📝 Show drafts* in repos listed inline).
+- **Steady refresh:** a check that changes nothing leaves an open menu open, and the Panel redraws a part of the
+  page only when its own content changed.
 - **Filters:** drafts hidden by default (`include_drafts`); `on_new: off` hides a repo entirely.
 - **Polling** every `poll_interval` (3 min by default, at least 30 s) plus *Check now*. Lists are paginated up
   to 1000 PR/MRs, and one failing call does not drop a whole host.
