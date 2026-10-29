@@ -33,6 +33,10 @@ type Item struct {
 
 	State string `json:"state,omitempty"` // StateOpen | StateMerged | StateClosed ("" = not known)
 
+	// DecideSHA, when set, is the commit an approval is for (publishing
+	// anyway after new commits: GitLab approves only the current head).
+	DecideSHA string `json:"-"`
+
 	Account string `json:"account,omitempty"` // Account.Key that found it ("" = the CLI's default)
 
 	Requested    bool `json:"requested"`      // my review was requested / I am a reviewer

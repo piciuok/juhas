@@ -198,7 +198,39 @@ func LoadProposal(path string) (*Proposal, error) {
 	if err := json.Unmarshal(b, &p); err != nil {
 		return nil, err
 	}
+	if p.Decided() {
+		p.SkipUndecided() // decided before Juhas did this on publish
+	}
 	return &p, nil
+}
+
+// ProposalState sums a proposal up the same way everywhere (the tray, the
+// Panel and the proposal page).
+type ProposalState struct {
+	Pending  int    `json:"pending"`
+	Accepted int    `json:"accepted"` // accepted, or failed: still to publish
+	Posted   int    `json:"posted"`
+	Total    int    `json:"total"`
+	Waiting  bool   `json:"waiting"`            // something still needs the user
+	Decision string `json:"decision,omitempty"` // approve | request_changes, when sent
+}
+
+func (p *Proposal) State() ProposalState {
+	s := ProposalState{Total: len(p.All()), Waiting: !p.Resolved()}
+	for _, c := range p.All() {
+		switch c.Status {
+		case CommentPending:
+			s.Pending++
+		case CommentAccepted, CommentFailed:
+			s.Accepted++
+		case CommentPosted:
+			s.Posted++
+		}
+	}
+	if p.Decided() {
+		s.Decision = p.Decision.Event
+	}
+	return s
 }
 
 // Counts returns pending, accepted and posted comment numbers (summary included).

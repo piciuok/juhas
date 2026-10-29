@@ -32,34 +32,27 @@ type panelAgent struct {
 }
 
 type panelEntry struct {
-	URL       string       `json:"url"`
-	Ref       string       `json:"ref"`
-	Title     string       `json:"title"`
-	Author    string       `json:"author"`
-	Files     string       `json:"files"`
-	Draft     bool         `json:"draft"`
-	Urgent    bool         `json:"urgent"`
-	UrgentWhy string       `json:"urgent_why"`
-	Acked     bool         `json:"acked"`
-	Status    string       `json:"status"` // pending|queued|running|done|failed|skipped|noclone
-	Busy      bool         `json:"busy"`
-	Stale     bool         `json:"stale"`
-	Brief     bool         `json:"brief"`
-	LogID     string       `json:"log_id"`
-	Error     string       `json:"error"`
-	Method    string       `json:"method"` // of the last run
-	Agents    []panelAgent `json:"agents"` // default first; empty = cannot run
-	Guess     string       `json:"guess"`  // clone found but not mapped
-	Proposal  *panelProp   `json:"proposal,omitempty"`
-	Requested bool         `json:"requested"`
-	Assigned  bool         `json:"assigned"`
-}
-
-type panelProp struct {
-	Pending  int `json:"pending"`
-	Accepted int `json:"accepted"`
-	Posted   int `json:"posted"`
-	Total    int `json:"total"`
+	URL       string                `json:"url"`
+	Ref       string                `json:"ref"`
+	Title     string                `json:"title"`
+	Author    string                `json:"author"`
+	Files     string                `json:"files"`
+	Draft     bool                  `json:"draft"`
+	Urgent    bool                  `json:"urgent"`
+	UrgentWhy string                `json:"urgent_why"`
+	Acked     bool                  `json:"acked"`
+	Status    string                `json:"status"` // pending|queued|running|done|failed|skipped|noclone
+	Busy      bool                  `json:"busy"`
+	Stale     bool                  `json:"stale"`
+	Brief     bool                  `json:"brief"`
+	LogID     string                `json:"log_id"`
+	Error     string                `json:"error"`
+	Method    string                `json:"method"` // of the last run
+	Agents    []panelAgent          `json:"agents"` // default first; empty = cannot run
+	Guess     string                `json:"guess"`  // clone found but not mapped
+	Proposal  *review.ProposalState `json:"proposal,omitempty"`
+	Requested bool                  `json:"requested"`
+	Assigned  bool                  `json:"assigned"`
 }
 
 type panelRepo struct {
@@ -109,16 +102,16 @@ type panelProject struct {
 
 // panelHistory is one reviewed PR/MR.
 type panelHistory struct {
-	URL      string     `json:"url"`
-	Repo     string     `json:"repo"`
-	Ref      string     `json:"ref"`
-	Title    string     `json:"title"`
-	When     string     `json:"when"`
-	Method   string     `json:"method"`
-	Open     bool       `json:"open"` // still in the queue (otherwise merged/closed/not mine)
-	Brief    bool       `json:"brief"`
-	LogID    string     `json:"log_id"`
-	Proposal *panelProp `json:"proposal,omitempty"`
+	URL      string                `json:"url"`
+	Repo     string                `json:"repo"`
+	Ref      string                `json:"ref"`
+	Title    string                `json:"title"`
+	When     string                `json:"when"`
+	Method   string                `json:"method"`
+	Open     bool                  `json:"open"` // still in the queue (otherwise merged/closed/not mine)
+	Brief    bool                  `json:"brief"`
+	LogID    string                `json:"log_id"`
+	Proposal *review.ProposalState `json:"proposal,omitempty"`
 }
 
 type panelModel struct {
@@ -266,8 +259,8 @@ func (a *App) panelEntry(e queue.Entry, st *state.State, cfg *config.Config, run
 		if j.Log != "" {
 			pe.LogID = strings.TrimSuffix(lastPath(j.Log), ".log")
 			if p, err := review.LoadProposal(review.ProposalPath(j.Log)); err == nil {
-				pend, acc, posted := p.Counts()
-				pe.Proposal = &panelProp{Pending: pend, Accepted: acc, Posted: posted, Total: len(p.All())}
+				ps := p.State()
+				pe.Proposal = &ps
 			}
 		}
 		if j.Status == state.Asked {
@@ -694,8 +687,8 @@ func history(st *state.State, snap *queue.Snapshot) []panelHistory {
 		if j.Log != "" {
 			h.LogID = strings.TrimSuffix(lastPath(j.Log), ".log")
 			if p, err := review.LoadProposal(review.ProposalPath(j.Log)); err == nil {
-				pend, acc, posted := p.Counts()
-				h.Proposal = &panelProp{Pending: pend, Accepted: acc, Posted: posted, Total: len(p.All())}
+				ps := p.State()
+				h.Proposal = &ps
 			}
 		}
 		rows = append(rows, row{h, j.FinishedAt})

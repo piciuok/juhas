@@ -269,6 +269,11 @@ func (s *Server) reviewPublish(w http.ResponseWriter, r *http.Request) (any, err
 	if it.HeadSHA != p.HeadSHA && p.HeadSHA != "" && !req.Force {
 		return nil, errors.New("stale: new commits since the review — lines may have shifted")
 	}
+	if p.HeadSHA != "" && it.HeadSHA != p.HeadSHA {
+		// confirmed: comments stay on the reviewed commit, the decision is
+		// about the current one (GitLab approves only the head)
+		it.DecideSHA = it.HeadSHA
+	}
 	if p.HeadSHA != "" {
 		it.HeadSHA = p.HeadSHA // anchor comments to the commit that was reviewed
 	}

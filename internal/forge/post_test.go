@@ -267,3 +267,15 @@ esac`)
 		t.Errorf("approved although the comment failed:\n%s", b)
 	}
 }
+
+// Publishing anyway after new commits: GitLab approves the current head.
+func TestPublishGitLabApproveCurrentHead(t *testing.T) {
+	log := fakeCLI(t, "glab", `echo '{"id":1}'`)
+	it := Item{Platform: GitLab, Repo: "gl.example/t/a", Number: 4, URL: "u", HeadSHA: "reviewed", DecideSHA: "now"}
+	if _, _, dec := Publish(context.Background(), it, "", nil, EventApprove); dec.Err != nil {
+		t.Fatal(dec.Err)
+	}
+	if b, _ := os.ReadFile(log); !strings.Contains(string(b), `{"sha":"now"}`) {
+		t.Errorf("calls:\n%s", b)
+	}
+}

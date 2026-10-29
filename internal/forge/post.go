@@ -110,7 +110,11 @@ func Publish(ctx context.Context, it Item, summary string, comments []PostCommen
 // glApprove approves the reviewed commit: GitLab refuses when the head moved.
 func glApprove(ctx context.Context, env []string, it Item) PostResult {
 	host, project := SplitKey(it.Repo)
-	b, _ := json.Marshal(map[string]string{"sha": it.HeadSHA})
+	sha := it.HeadSHA
+	if it.DecideSHA != "" {
+		sha = it.DecideSHA
+	}
+	b, _ := json.Marshal(map[string]string{"sha": sha})
 	_, err := runInput(ctx, env, b, "glab", "api", "--hostname", host, "-X", "POST", "-H", "Content-Type: application/json",
 		fmt.Sprintf("projects/%s/merge_requests/%d/approve", url.PathEscape(project), it.Number), "--input", "-")
 	if err != nil {

@@ -155,7 +155,7 @@ async function api(path, body) {
   return j;
 }
 
-let P = null, stale = false, confirmForce = 0, publishing = false;
+let P = null, stale = false, headNow = "", publishing = false;
 const all = () => (P.summary && P.summary.body ? [P.summary] : []).concat(P.comments || []);
 const EVENT = { comment: "comment only", approve: "approve", request_changes: "request changes" };
 const LABEL = { pending: "awaiting decision", accepted: "accepted", rejected: "rejected", posted: "published", failed: "publish failed" };
@@ -287,7 +287,7 @@ function render() {
 async function load() {
   try {
     const r = await api("/api/review?job=" + JOB);
-    P = r.proposal; stale = r.stale;
+    P = r.proposal; stale = r.stale; headNow = r.head_now;
     document.querySelectorAll("#acceptAll, #rejectAll, footer").forEach((el) => el.style.display = "");
     const ref = P.platform === "github" ? "#" + P.number : "!" + P.number;
     $("#title").replaceChildren(h("a", { href: P.url, target: "_blank", rel: "noopener" }, `${ref} ${P.title}`),
@@ -297,7 +297,7 @@ async function load() {
     // a decision already sent is not preselected again
     $("#event").value = P.decision && P.decision.status === "posted" ? "comment" : (P.suggest || "comment");
     const b = $("#banners"); b.replaceChildren();
-    if (stale) b.append(h("div", { class: "banner warn" }, `New commits since the review (now ${String(r.head_now).slice(0, 10)}). Line numbers may be off — consider reviewing again.`));
+    if (stale) b.append(h("div", { class: "banner warn" }, `New commits since the review (now ${String(r.head_now).slice(0, 10)}). Line numbers may be off — consider reviewing again; publishing asks first.`));
     if (r.lookup_error) b.append(h("div", { class: "banner err" }, "Couldn't check the PR/MR: " + r.lookup_error));
     render();
   } catch (e) {
@@ -314,10 +314,32 @@ async function load() {
 
 $("#acceptAll").addEventListener("click", () => { all().forEach((c) => { if (c.status === "pending" || c.status === "rejected") c.status = "accepted"; }); save(); render(); });
 $("#rejectAll").addEventListener("click", () => { all().forEach((c) => { if (c.status !== "posted") c.status = "rejected"; }); save(); render(); });
-$("#publish").addEventListener("click", async () => {
-  const force = stale && Date.now() - confirmForce < 5000;
-  if (stale && !force) { confirmForce = Date.now(); $("#saved").textContent = "There are new commits — click again within 5 s to publish anyway."; return; }
+// staleConfirm: new commits since the review. Publishing then needs an
+// explicit choice — review the new commits, or publish anyway (comments
+// stay on the reviewed version, an approve / change request is about the
+// current one).
+function staleConfirm(now) {
+  const ev = $("#event").value;
+  const box = h("div", { class: "banner warn", id: "staleBox" },
+    h("b", {}, "New commits since the review" + (now ? ` (now ${String(now).slice(0, 10)})` : "") + ". "),
+    `The comments are anchored to the reviewed version ${String(P.head_sha || "").slice(0, 10)}, so their lines may have shifted.`,
+    ev !== "comment" ? ` The ${EVENT[ev]} will apply to the current version, which nobody reviewed.` : "",
+    h("div", { style: "margin-top:8px; display:flex; gap:8px; flex-wrap:wrap" },
+      h("button", { class: "primary", onclick: async (e) => {
+        e.target.disabled = true;
+        try { await api("/api/panel/do", { action: "analyze", url: P.url }); box.replaceChildren("⟳ Review of the new commits started — a new proposal comes when it is done."); }
+        catch (err) { box.replaceChildren("Couldn't start the review: " + err.message); }
+      } }, "⟳ Review the new commits"),
+      h("button", { onclick: () => { box.remove(); publish(true); } }, ev === "comment" ? "Publish anyway" : `Publish anyway and ${EVENT[ev]} the current version`),
+      h("button", { onclick: () => box.remove() }, "Cancel")));
+  const old = $("#staleBox"); if (old) old.remove();
+  $("#banners").prepend(box);
+  box.scrollIntoView({ block: "nearest" });
+}
+
+async function publish(force) {
   if (publishing) return;
+  if (stale && !force) { staleConfirm(headNow); return; }
   clearTimeout(saveTimer);
   publishing = true;
   $("#publish").disabled = true; $("#publish").textContent = "Publishing…";
@@ -337,12 +359,12 @@ $("#publish").addEventListener("click", async () => {
     $("#banners").prepend(h("div", { class: "banner " + (bad ? "err" : "ok") }, msg));
   } catch (e) {
     publishing = false;
-    if (e.message.startsWith("stale:")) stale = true; // pushed after the page loaded: the next click can force
-    $("#banners").prepend(h("div", { class: "banner err" }, e.message + (stale && !force ? " — click Publish again within 5 s to publish anyway." : "")));
-    if (stale && !force) confirmForce = Date.now();
     counts();
+    if (e.message.startsWith("stale:")) { stale = true; staleConfirm(""); return; } // pushed after the page loaded
+    $("#banners").prepend(h("div", { class: "banner err" }, e.message));
   }
-});
+}
+$("#publish").addEventListener("click", () => publish(false));
 $("#event").addEventListener("change", counts);
 
 // ---- chat ------------------------------------------------------------------

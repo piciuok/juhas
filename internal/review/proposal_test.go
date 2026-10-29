@@ -140,3 +140,28 @@ func TestResolvedAfterDecision(t *testing.T) {
 		t.Fatal("rejected comments must stay resolved")
 	}
 }
+
+// A proposal decided before undecided comments were settled on publish
+// loads settled; State agrees with Resolved.
+func TestLoadSettlesDecidedProposal(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "x.review.json")
+	p := &Proposal{Summary: ProposedComment{ID: "summary", Body: "S", Status: CommentPosted},
+		Comments: []ProposedComment{{ID: "c1", Body: "x", Status: CommentPending}, {ID: "c2", Body: "y", Status: CommentPosted}},
+		Decision: &Decision{Event: "approve", Status: CommentPosted}}
+	if err := SaveProposal(path, p); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadProposal(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := got.State()
+	if s.Waiting || s.Decision != "approve" || s.Pending != 0 || s.Posted != 2 || s.Total != 3 || got.Comments[0].Status != CommentRejected {
+		t.Fatalf("%+v %+v", s, got.Comments)
+	}
+	got.Decision.Status = CommentFailed
+	got.Comments[0].Status = CommentPending
+	if s := got.State(); !s.Waiting || s.Decision != "" || s.Pending != 1 {
+		t.Fatalf("failed decision: %+v", s)
+	}
+}

@@ -181,6 +181,17 @@ function files(f) {
     ...f.split(" ").map((p) => h("span", { class: p[0] === "+" ? "a" : p[0] === "~" ? "m" : p[0] === "−" ? "d" : "" }, p + " ")));
 }
 
+// propLabel says where a proposal stands — the same rule as the tray's ❓:
+// waiting only while something still needs you.
+function propLabel(p, open, stale) {
+  const pub = `${p.posted}/${p.total} published`;
+  if (p.decision) return (p.decision === "approve" ? "✓ Approved" : "✕ Changes requested") + " · " + pub;
+  if (!p.waiting) return p.posted ? "📝 " + pub : "📝 Proposal — settled";
+  if (!open) return `📝 Proposal — left undecided (${p.pending + p.accepted})`;
+  if (stale) return `📝 Proposal of the older version (${p.pending + p.accepted} undecided)`;
+  return p.pending ? `📝 Proposal (${p.pending} awaiting decision)` : `📝 Proposal (${p.accepted} to publish)`;
+}
+
 function entryRow(e) {
   const logURL = e.log_id ? `/log?t=${T}&job=${e.log_id}` : null;
   const actions = [];
@@ -197,9 +208,8 @@ function entryRow(e) {
     if (logURL) actions.push(h("a", { class: "btn", href: logURL, target: "_blank" }, "📜 Run log"));
   }
   if (e.proposal && e.log_id) {
-    const p = e.proposal;
-    const label = p.pending ? `📝 Proposal (${p.pending} awaiting decision)` : p.posted ? `📝 Published ${p.posted}/${p.total}` : `📝 Proposal (${p.accepted} ✓)`;
-    actions.push(h("a", { class: "btn" + (p.pending ? " primary" : ""), href: `/review?t=${T}&job=${e.log_id}`, target: "_blank", style: p.pending ? "color:#fff" : null }, label));
+    const hot = e.proposal.waiting && !e.stale;
+    actions.push(h("a", { class: "btn" + (hot ? " primary" : ""), href: `/review?t=${T}&job=${e.log_id}`, target: "_blank", style: hot ? "color:#fff" : null }, propLabel(e.proposal, true, e.stale)));
   }
   if (e.brief && e.log_id && !e.busy) actions.push(chatBtn(e.log_id));
   if (e.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: e.url }) }, e.stale ? "📄 Brief ⟳" : "📄 Brief"));
@@ -213,7 +223,8 @@ function entryRow(e) {
   return h("div", { class: "row" + (e.urgent ? " urgent" : "") + (e.status === "skipped" ? " skipped" : "") },
     h("span", { class: "st " + (e.busy && e.status !== "queued" ? "running" : e.stale && !e.busy ? "stale" : e.status), title: e.stale ? "The author pushed after your review — the brief is about an older commit" : null },
       e.stale && !e.busy ? "⟳ new commits"
-        : e.status === "done" && e.proposal && (e.proposal.pending || e.proposal.accepted) ? "📝 awaiting decision" : (STATUS[e.status] || e.status)),
+        : e.status === "done" && e.proposal && e.proposal.waiting ? "📝 awaiting decision"
+        : e.status === "failed" && e.proposal ? "📝 done · re-run failed" : (STATUS[e.status] || e.status)),
     h("div", { class: "title" },
       h("div", {}, h("span", { class: "ref" }, e.ref), h("a", { href: e.url, target: "_blank", rel: "noopener" }, e.title)),
       h("div", { class: "meta" },
@@ -411,8 +422,7 @@ function renderHistory(m) {
     h("h2", {}, "Reviewed history — PR/MRs not waiting for you"),
     hist.map((x) => {
       const actions = [];
-      if (x.proposal && x.log_id) actions.push(h("a", { class: "btn", href: `/review?t=${T}&job=${x.log_id}`, target: "_blank" },
-        x.proposal.posted ? `📝 published ${x.proposal.posted}/${x.proposal.total}` : `📝 proposal (${x.proposal.pending} awaiting decision)`));
+      if (x.proposal && x.log_id) actions.push(h("a", { class: "btn", href: `/review?t=${T}&job=${x.log_id}`, target: "_blank" }, propLabel(x.proposal, x.open)));
       if (x.brief && x.log_id) actions.push(chatBtn(x.log_id));
       if (x.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: x.url }) }, "📄 Brief"));
       if (x.log_id) actions.push(h("a", { class: "btn", href: `/log?t=${T}&job=${x.log_id}`, target: "_blank" }, "📜 Run log"));

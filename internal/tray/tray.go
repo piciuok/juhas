@@ -1319,16 +1319,14 @@ func proposalOf(j *state.Job) (proposalCounts, bool) {
 		return proposalCounts{}, false
 	}
 	p, err := review.LoadProposal(review.ProposalPath(j.Log))
-	if err != nil || p.Resolved() {
+	if err != nil {
 		return proposalCounts{}, false
 	}
-	pend, acc, _ := p.Counts()
-	for _, c := range p.All() {
-		if c.Status == review.CommentFailed {
-			acc++ // needs another publish attempt
-		}
+	s := p.State()
+	if !s.Waiting {
+		return proposalCounts{}, false
 	}
-	return proposalCounts{Ref: ref(*j), Title: j.Title, Log: j.Log, Pending: pend, Accepted: acc, Total: len(p.All())}, true
+	return proposalCounts{Ref: ref(*j), Title: j.Title, Log: j.Log, Pending: s.Pending, Accepted: s.Accepted, Total: s.Total}, true
 }
 
 // awaitingDecision lists the queue's PR/MRs whose proposal waits for me.
@@ -1338,7 +1336,11 @@ func awaitingDecision(snap *queue.Snapshot, st *state.State) []proposalCounts {
 	}
 	var out []proposalCounts
 	for _, e := range snap.Entries {
-		if pr, ok := proposalOf(st.Job(e.URL)); ok {
+		j := st.Job(e.URL)
+		if j != nil && j.Stale(e.HeadSHA) {
+			continue // new commits: it needs a new review, not a decision on the old one
+		}
+		if pr, ok := proposalOf(j); ok {
 			out = append(out, pr)
 		}
 	}
