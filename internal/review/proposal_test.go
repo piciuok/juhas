@@ -114,3 +114,29 @@ func TestVerdictRulesInPrompt(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// Approving without accepting every comment settles the proposal.
+func TestResolvedAfterDecision(t *testing.T) {
+	p := &Proposal{Summary: ProposedComment{ID: "summary", Body: "S", Status: CommentPending},
+		Comments: []ProposedComment{{ID: "c1", Body: "x", Status: CommentPending}}}
+	if p.Resolved() {
+		t.Fatal("undecided proposal resolved")
+	}
+	p.Decision = &Decision{Event: "approve", Status: CommentPosted}
+	if !p.Resolved() {
+		t.Fatal("approved, still waiting")
+	}
+	p.Comments[0].Status = CommentAccepted // accepted but not published: still to do
+	if p.Resolved() {
+		t.Fatal("accepted comment forgotten")
+	}
+	p.Comments[0].Status = CommentPending
+	p.SkipUndecided()
+	if p.Summary.Status != CommentRejected || p.Comments[0].Status != CommentRejected || p.Comments[0].Note != "not sent with the approve" {
+		t.Fatalf("%+v %+v", p.Summary, p.Comments[0])
+	}
+	p.Decision.Status = CommentFailed
+	if !p.Resolved() {
+		t.Fatal("rejected comments must stay resolved")
+	}
+}

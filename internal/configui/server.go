@@ -299,6 +299,8 @@ func (s *Server) reviewPublish(w http.ResponseWriter, r *http.Request) (any, err
 		p.Decision = &review.Decision{Event: req.Event, Status: review.CommentPosted, URL: dec.URL}
 		if dec.Err != nil {
 			p.Decision.Status, p.Decision.Error = review.CommentFailed, dec.Err.Error()
+		} else {
+			p.SkipUndecided() // decided without them: nothing is left waiting
 		}
 	}
 	apply := func(pr forge.PostResult) {

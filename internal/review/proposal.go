@@ -240,13 +240,33 @@ func (p *Proposal) Find(id string) (*ProposedComment, error) {
 
 // Resolved: nothing waits for the user — every comment is posted or
 // rejected (an accepted but unpublished or failed one still needs action).
+// Once an approve or a change request went out, the comments left
+// undecided were left out on purpose: they wait for nothing.
 func (p *Proposal) Resolved() bool {
+	decided := p.Decided()
 	for _, c := range p.All() {
-		if c.Status != CommentPosted && c.Status != CommentRejected {
+		switch {
+		case c.Status == CommentPosted, c.Status == CommentRejected:
+		case c.Status == CommentPending && decided:
+		default:
 			return false
 		}
 	}
 	return true
+}
+
+// Decided: an approve or a change request was sent.
+func (p *Proposal) Decided() bool { return p.Decision != nil && p.Decision.Status == CommentPosted }
+
+// SkipUndecided rejects the comments still awaiting a decision, after an
+// approve or a change request was sent without them. They can still be
+// accepted and published later.
+func (p *Proposal) SkipUndecided() {
+	for _, c := range p.All() {
+		if c.Status == CommentPending {
+			c.Status, c.Note = CommentRejected, "not sent with the "+strings.ReplaceAll(p.Decision.Event, "_", " ")
+		}
+	}
 }
 
 // ProposalResolved reports whether the run behind logPath left nothing to
