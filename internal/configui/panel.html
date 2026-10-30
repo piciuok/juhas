@@ -17,127 +17,153 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, Cantarell, sans-serif; }
-header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 20px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+a { color: var(--accent); }
+
+/* header: status pills and tools, then the tabs */
+header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
+.bar { padding: 10px 20px 8px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; max-width: 1180px; margin: 0 auto; }
 header h1 { margin: 0; font-size: 16px; display: flex; gap: 8px; align-items: center; }
 .stats { display: flex; gap: 6px; flex-wrap: wrap; }
 .pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 12px; background: var(--chip); font-size: 12.5px; white-space: nowrap; }
-.pill.urgent { background: color-mix(in srgb, var(--volt) 25%, transparent); color: var(--text); font-weight: 600; }
+.pill.urgent { background: color-mix(in srgb, var(--volt) 25%, transparent); font-weight: 600; }
 .pill.live { color: var(--accent); }
 .spacer { flex: 1; }
-button, .btn { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; text-decoration: none; white-space: nowrap; }
+.tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+nav.tabs { display: flex; gap: 2px; padding: 0 20px; max-width: 1180px; margin: 0 auto; overflow-x: auto; scrollbar-width: none; }
+nav.tabs::-webkit-scrollbar { display: none; }
+nav.tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 7px 12px 8px; color: var(--muted); font-size: 13.5px; gap: 6px; }
+nav.tabs button:hover { color: var(--text); border-bottom-color: var(--line); }
+nav.tabs button.on { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+nav.tabs .n { font-size: 11.5px; font-weight: 600; min-width: 18px; padding: 0 6px; border-radius: 9px; background: var(--chip); color: var(--text); text-align: center; }
+nav.tabs .n.decide { background: var(--accent); color: #fff; }
+nav.tabs .n.urgent { background: var(--volt); color: #2b1d00; }
+nav.tabs .sep { flex: 1; min-width: 12px; }
+
+button, .btn { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
 button:hover, .btn:hover { border-color: var(--accent); }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary, button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.soft, button.soft { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); color: var(--accent); }
+.btn.soft:hover, button.soft:hover { background: var(--accent-weak); }
 button.volt { background: var(--volt); border-color: var(--volt); color: #2b1d00; font-weight: 600; }
 button:disabled { opacity: .5; cursor: default; }
 label.toggle { display: inline-flex; gap: 5px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; }
 main { padding: 16px 20px 60px; max-width: 1180px; margin: 0 auto; }
 #notice { display: none; margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--err); color: var(--err); }
 .errors { margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--warn); color: var(--warn); font-size: 13px; }
-section.repo { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
-.repo-head { display: flex; gap: 10px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-.repo-head a { color: var(--text); font-weight: 600; text-decoration: none; }
-.repo-head a:hover { color: var(--accent); }
-.repo-head .muted { font-size: 12.5px; }
 .muted { color: var(--muted); }
-/* a PR/MR row: the title (and its meta line) across the whole width, the
-   status and the buttons on the line below — long titles never squeeze them */
-.row { display: grid; grid-template-columns: 110px 1fr; gap: 6px 14px; padding: 9px 14px; border-top: 1px solid var(--line); align-items: center; }
-.row > .title { grid-column: 1 / -1; grid-row: 1; }
-.row > .st { grid-row: 2; justify-self: start; }
-.row > .actions { grid-row: 2; justify-content: flex-start; }
-.repo-head + .row { border-top: none; }
-.row.urgent { box-shadow: inset 3px 0 0 var(--volt); }
-.row.skipped { opacity: .55; }
-.st { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); text-align: center; white-space: nowrap; }
-.st.running { color: var(--accent); border-color: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
-.st.queued { color: var(--muted); border-style: dashed; }
-.st.done { color: var(--ok); border-color: var(--ok); }
-.st.failed { color: var(--err); border-color: var(--err); }
-.st.stale { color: var(--warn); border-color: var(--warn); font-weight: 600; }
-.meta .stale { color: var(--warn); }
-.au { display: inline-block; font-size: 11px; line-height: 16px; padding: 0 7px; border-radius: 8px; color: #fff; background: hsl(var(--h) 55% 45%); }
-@keyframes pulse { 50% { opacity: .45; } }
-.title { min-width: 0; }
+.err { color: var(--err); }
+.empty { padding: 40px; text-align: center; color: var(--muted); }
+
+/* a list: a card with a toolbar and rows */
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: visible; margin-bottom: 14px; }
+.card-head { display: flex; gap: 10px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.card-head .name { font-weight: 600; color: var(--text); text-decoration: none; }
+.card-head .name:hover { color: var(--accent); }
+.card-head .sub { font-size: 12.5px; color: var(--muted); }
+.card-head .tools { margin-left: auto; }
+.card-head .tools button { font-size: 12px; padding: 2px 8px; }
+.group { display: flex; width: 100%; gap: 8px; align-items: center; padding: 7px 14px; border: none; border-top: 1px solid var(--line); border-radius: 0; background: color-mix(in srgb, var(--chip) 45%, transparent); color: var(--muted); font-size: 12.5px; justify-content: flex-start; }
+button.group:hover { color: var(--text); }
+.none { padding: 12px 14px; color: var(--muted); font-size: 13px; }
+
+/* A row has fixed columns, the same in every state:
+   status (what it is + whose move) | title (wraps) and details | actions */
+.row { display: grid; grid-template-columns: 150px minmax(0, 1fr) 236px; gap: 4px 16px; padding: 10px 14px 10px 16px; border-top: 1px solid var(--line); align-items: start; position: relative; }
+.card-head + .row { border-top: none; }
+.row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--stripe, transparent); }
+.row.other { background: color-mix(in srgb, var(--chip) 30%, transparent); }
+.state { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; padding-top: 1px; }
+.chip { font-size: 12px; line-height: 20px; padding: 0 9px; border-radius: 10px; border: 1px solid var(--line); white-space: nowrap; color: var(--muted); }
+.move { font-size: 11px; color: var(--muted); padding-left: 2px; }
+.move b { font-weight: 600; color: var(--text); }
+.body { min-width: 0; }
+.title { overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .title a { color: var(--text); text-decoration: none; font-weight: 500; }
 .title a:hover { color: var(--accent); }
-.title .ref { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: var(--muted); margin-right: 6px; }
-.meta { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; gap: 10px; flex-wrap: wrap; }
+.ref { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: var(--muted); margin-right: 6px; }
+.meta { font-size: 12px; color: var(--muted); margin-top: 3px; display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: center; }
+.actions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+.actions .main { flex: 1; display: flex; gap: 6px; justify-content: flex-end; }
+.actions .main > * { font-size: 12.5px; padding: 4px 10px; }
+.actions .main > .wide { flex: 1; max-width: 186px; }
+
+/* states: colour of the stripe and the chip */
+.row[data-s=decide] { --stripe: var(--accent); }
+.row[data-s=decide] .chip { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.row[data-s=new] .chip { color: var(--text); border-color: color-mix(in srgb, var(--text) 35%, var(--line)); }
+.row[data-s=stale] { --stripe: var(--warn); }
+.row[data-s=stale] .chip { color: var(--warn); border-color: var(--warn); font-weight: 600; }
+.row[data-s=running] { --stripe: color-mix(in srgb, var(--accent) 50%, transparent); }
+.row[data-s=running] .chip { color: var(--accent); border-color: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+.row[data-s=queued] .chip { border-style: dashed; }
+.row[data-s=failed] { --stripe: var(--err); }
+.row[data-s=failed] .chip { color: var(--err); border-color: var(--err); }
+.row[data-s=done] .chip, .row[data-s=approved] .chip { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 60%, var(--line)); }
+.row[data-s=changes] .chip { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
+.row[data-s=done] .title a, .row[data-s=approved] .title a, .row[data-s=changes] .title a, .row[data-s=skipped] .title a, .row.other .title a { font-weight: 400; }
+.row[data-s=skipped] { opacity: .6; }
+.row.urgent { --stripe: var(--volt); }
+@keyframes pulse { 50% { opacity: .45; } }
+
+.au { display: inline-block; font-size: 11px; line-height: 16px; padding: 0 7px; border-radius: 8px; color: #fff; background: hsl(var(--h) 55% 45%); }
+.tag { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 8px; background: var(--chip); color: var(--muted); }
 .files { font-family: ui-monospace, Menlo, monospace; }
 .files .a { color: var(--ok); } .files .m { color: var(--warn); } .files .d { color: var(--err); }
 .why { color: var(--warn); }
-.err { color: var(--err); }
-.actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-.empty { padding: 40px; text-align: center; color: var(--muted); }
-#histToggle, #treesToggle { display: block; width: 100%; margin: 26px 0 10px; padding: 10px; border-style: dashed; color: var(--muted); background: transparent; }
-#histToggle:hover, #treesToggle:hover { color: var(--text); }
-section.history { border: 1px dashed var(--line); border-radius: 10px; background: color-mix(in srgb, var(--panel) 55%, transparent); }
-section.history h2 { margin: 0; padding: 10px 14px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-bottom: 1px dashed var(--line); }
-.hrow { display: grid; grid-template-columns: 130px 1fr; gap: 6px 14px; padding: 8px 14px; border-top: 1px dashed var(--line); align-items: center; }
-.hrow > .title { grid-column: 1 / -1; grid-row: 1; }
-.hrow > .when, .hrow > .actions { grid-row: 2; }
-.hrow > .actions { justify-content: flex-start; }
-section.history h2 + .hrow { border-top: none; }
-.hrow .when { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.hrow .title a { color: var(--muted); }
-.hrow .title a:hover { color: var(--accent); }
-.closed { font-size: 11.5px; padding: 1px 7px; border-radius: 9px; background: var(--chip); color: var(--muted); }
-.others-toggle { display: block; width: 100%; padding: 7px 14px; border: none; border-top: 1px solid var(--line); border-radius: 0; text-align: left; color: var(--muted); background: transparent; }
-.others-toggle:hover { color: var(--text); }
-.row.other { background: color-mix(in srgb, var(--chip) 35%, transparent); }
-.row.other .title a { font-weight: 400; }
-.draft { font-size: 11px; padding: 0 6px; border-radius: 8px; background: var(--chip); color: var(--muted); }
-.repo-head .tools { margin-left: auto; display: flex; gap: 6px; }
-.repo-head .tools button { font-size: 12px; padding: 2px 8px; }
-.none { padding: 9px 14px; color: var(--muted); font-size: 13px; }
-#pinToggle { display: block; width: 100%; margin: 26px 0 10px; padding: 10px; border-style: dashed; color: var(--muted); background: transparent; }
-#pinToggle:hover { color: var(--text); }
+
+/* the ⋯ menu: everything that is not the row's main action */
+details.more { position: relative; flex: none; }
+details.more > summary { list-style: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 5px 9px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); user-select: none; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary:hover, details.more[open] > summary { color: var(--text); border-color: var(--accent); }
+details.more.off > summary { visibility: hidden; }
+details.more .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 230px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 4px; display: flex; flex-direction: column; }
+details.more .menu > * { display: block; text-align: left; border: none; background: none; border-radius: 5px; padding: 6px 10px; font-size: 13px; color: var(--text); text-decoration: none; }
+details.more .menu > button:hover, details.more .menu > a:hover { background: var(--chip); }
+details.more .menu hr { border: none; border-top: 1px solid var(--line); margin: 4px 0; padding: 0; }
+
 section.pin { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 section.pin h2 { margin: 0 0 4px; font-size: 14px; }
 section.pin input { width: 100%; font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); margin: 8px 0; }
 .prow { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
 .prow .key { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .prow .from { font-size: 11.5px; color: var(--muted); }
-@media (max-width: 760px) { .hrow { grid-template-columns: 1fr; } }
-@media (max-width: 760px) {
+
+@media (max-width: 860px) {
   .row { grid-template-columns: 1fr; }
-  .row > .st, .row > .actions, .hrow > .when, .hrow > .actions { grid-row: auto; }
+  .state { flex-direction: row; align-items: center; gap: 8px; }
   .actions { justify-content: flex-start; }
-  header { padding: 10px 16px; } main { padding: 12px 16px 40px; }
+  .actions .main { flex: none; justify-content: flex-start; }
+  details.more .menu { left: 0; right: auto; }
+  .bar { padding: 10px 16px 6px; } nav.tabs { padding: 0 16px; } main { padding: 12px 16px 40px; }
 }
 </style>
 </head>
 <body>
 <header>
-  <h1><span id="logo"></span>Juhas</h1>
-  <div class="stats" id="stats"></div>
-  <span class="spacer"></span>
-  <label class="toggle" title="New urgent PR/MR: lightning on screen and a loud notification"><input type="checkbox" id="tgZap"> ⚡ kick</label>
-  <button id="btnZap" title="Show the effect">⚡ test</button>
-  <label class="toggle"><input type="checkbox" id="tgAuto"> start at login</label>
-  <button id="btnPoll" title="Manual check: also asks about PR/MRs you skipped (same head)">🔄 Check now</button>
-  <button id="btnBriefs">📁 Briefs</button>
-  <button id="btnSettings">⚙️ Settings</button>
-  <button id="btnDoctor" title="CLI (gh, glab, claude, codex), login, repos">🩺 Diagnostics</button>
+  <div class="bar">
+    <h1><span id="logo"></span>Juhas</h1>
+    <div class="stats" id="stats"></div>
+    <span class="spacer"></span>
+    <div class="tools">
+      <label class="toggle" title="New urgent PR/MR: lightning on screen and a loud notification"><input type="checkbox" id="tgZap"> ⚡ kick</label>
+      <button id="btnZap" title="Show the effect">⚡ test</button>
+      <label class="toggle"><input type="checkbox" id="tgAuto"> start at login</label>
+      <button id="btnPoll" title="Manual check: also asks about PR/MRs you skipped (same head)">🔄 Check now</button>
+      <button id="btnBriefs">📁 Briefs</button>
+      <button id="btnSettings">⚙️ Settings</button>
+      <button id="btnDoctor" title="CLI (gh, glab, claude, codex), login, repos">🩺 Diagnostics</button>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs"></nav>
 </header>
 <main>
   <div id="notice"></div>
   <div id="errors"></div>
-  <div id="repos"></div>
-  <div id="history"></div>
-  <div id="trees"></div>
-  <div id="pinbox"></div>
+  <div id="view"></div>
 </main>
 <script>
 "use strict";
-// author is a badge coloured from the username, the same on every load.
-function author(user) {
-  if (!user) return null;
-  let x = 2166136261;
-  for (const ch of user.toLowerCase()) x = Math.imul(x ^ ch.codePointAt(0), 16777619) >>> 0;
-  const el = h("span", { class: "au", title: "author" }, user);
-  el.style.setProperty("--h", String(x % 360));
-  return el;
-}
 const T = new URLSearchParams(location.search).get("t");
 const $ = (s) => document.querySelector(s);
 const h = (tag, attrs = {}, ...kids) => {
@@ -151,6 +177,20 @@ const h = (tag, attrs = {}, ...kids) => {
   for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : String(kid));
   return el;
 };
+const store = {
+  get: (k, d) => { try { const v = localStorage.getItem("juhas." + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } },
+  set: (k, v) => { try { localStorage.setItem("juhas." + k, JSON.stringify(v)); } catch (_) {} },
+};
+
+// author is a badge coloured from the username, the same on every load.
+function author(user) {
+  if (!user) return null;
+  let x = 2166136261;
+  for (const ch of user.toLowerCase()) x = Math.imul(x ^ ch.codePointAt(0), 16777619) >>> 0;
+  const el = h("span", { class: "au", title: "author" }, user);
+  el.style.setProperty("--h", String(x % 360));
+  return el;
+}
 
 // favicons: magnifier normally, lightning bolt while something urgent waits
 const ICON_LENS = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='13' cy='13' r='8' fill='none' stroke='%232f81f7' stroke-width='3.5'/><path d='M19 19l8 8' stroke='%232f81f7' stroke-width='4.5' stroke-linecap='round'/></svg>`;
@@ -173,71 +213,310 @@ async function act(action, extra = {}) {
   catch (e) { notice(e.message); }
 }
 
-const STATUS = { pending: "waiting", queued: "⏳ queued", running: "● reviewing", done: "📝 done", failed: "✗ failed", skipped: "skipped", noclone: "no clone" };
-
 function files(f) {
   if (!f) return null;
   return h("span", { class: "files", title: "files: +added ~changed −deleted" },
     ...f.split(" ").map((p) => h("span", { class: p[0] === "+" ? "a" : p[0] === "~" ? "m" : p[0] === "−" ? "d" : "" }, p + " ")));
 }
 
-// propLabel says where a proposal stands — the same rule as the tray's ❓:
-// waiting only while something still needs you.
-function propLabel(p, open, stale) {
+// shortErr: the error without the log path (the log is one click away).
+const shortErr = (s) => (s || "").replace(/\s*\(log: [^)]*\)/g, "").replace(/^claude: success$/, "Claude ended without a report").slice(0, 140);
+
+// ---- states ---------------------------------------------------------------
+// A row is in exactly one state and says whose move it is: yours, the
+// agent's or the author's. Rows are listed in the state's order (n).
+const YOU = "you", AGENT = "agent", AUTHOR = "author", NOBODY = "";
+const MOVE = { [YOU]: ["your move", true], [AGENT]: ["the agent is on it", false], [AUTHOR]: ["the author's move", false] };
+
+function entryState(e) {
+  const p = e.proposal;
+  if (e.busy) return e.status === "queued" ? { k: "queued", n: 3, label: "⏳ Queued", who: AGENT } : { k: "running", n: 2, label: "● Reviewing", who: AGENT };
+  if (e.stale) return { k: "stale", n: 1, label: "⟳ New commits", who: YOU };
+  if (p && p.waiting) return { k: "decide", n: 0, label: "📝 Your decision", who: YOU };
+  if (p && p.decision === "approve") return { k: "approved", n: 6, label: "✓ Approved", who: AUTHOR };
+  if (p && p.decision) return { k: "changes", n: 6, label: "✕ Changes requested", who: AUTHOR };
+  if (e.status === "done" || (e.status === "failed" && p)) return { k: "done", n: 6, label: p && p.posted ? "✓ Commented" : "✓ Reviewed", who: p && p.posted ? AUTHOR : YOU };
+  if (e.status === "failed") return { k: "failed", n: 5, label: "✕ Review failed", who: YOU };
+  if (e.status === "skipped") return { k: "skipped", n: 8, label: "Skipped", who: NOBODY };
+  if (e.status === "noclone") return { k: "noclone", n: 7, label: "No local clone", who: YOU };
+  return { k: "new", n: 4, label: "To review", who: YOU };
+}
+
+// ---- building blocks --------------------------------------------------------
+// menuOpen keeps a row's ⋯ menu open across redraws.
+let menuOpen = null;
+function more(id, items) {
+  items = items.flat().filter(Boolean);
+  items = items.filter((x, i) => !(x.tagName === "HR" && (i === 0 || items[i - 1].tagName === "HR")));
+  while (items.length && items[items.length - 1].tagName === "HR") items.pop();
+  const d = h("details", { class: "more" + (items.length ? "" : " off"), open: items.length > 0 && menuOpen === id },
+    h("summary", { title: "More actions" }, "⋯"), h("div", { class: "menu" }, items));
+  d.addEventListener("toggle", () => {
+    if (d.open) { menuOpen = id; document.querySelectorAll("details.more[open]").forEach((o) => { if (o !== d) o.open = false; }); }
+    else if (menuOpen === id) menuOpen = null;
+  });
+  return d;
+}
+document.addEventListener("click", (ev) => {
+  if (ev.target.closest("details.more > summary")) return;
+  menuOpen = null;
+  document.querySelectorAll("details.more[open]").forEach((o) => o.open = false);
+});
+
+const link = (cls, href, label, title) => h("a", { class: "btn " + cls, href, target: "_blank", rel: "noopener", title }, label);
+const btn = (cls, label, fn, title) => h("button", { class: cls, title, onclick: (ev) => { ev.currentTarget.disabled = true; fn(); } }, label);
+const item = (label, fn, title) => h("button", { title, onclick: fn }, label);
+const itemLink = (label, href) => h("a", { href, target: "_blank", rel: "noopener" }, label);
+
+// row is the one layout every list uses: state | title + details | actions.
+function row({ s, cls = "", ref, title, url, meta, main, menu }) {
+  const [move, mine] = MOVE[s.who] || ["", false];
+  return h("div", { class: "row " + cls, "data-s": s.k },
+    h("div", { class: "state" },
+      h("span", { class: "chip" }, s.label),
+      move ? h("span", { class: "move" }, mine ? h("b", {}, "→ " + move) : move) : null),
+    h("div", { class: "body" },
+      h("div", { class: "title" }, h("span", { class: "ref" }, ref), h("a", { href: url, target: "_blank", rel: "noopener", title }, title)),
+      h("div", { class: "meta" }, meta)),
+    h("div", { class: "actions" }, h("div", { class: "main" }, main), menu));
+}
+
+// propLabel says where a proposal stands.
+function propLabel(p) {
   const pub = `${p.posted}/${p.total} published`;
-  if (p.decision) return (p.decision === "approve" ? "✓ Approved" : "✕ Changes requested") + " · " + pub;
-  if (!p.waiting) return p.posted ? "📝 " + pub : "📝 Proposal — settled";
-  if (!open) return `📝 Proposal — left undecided (${p.pending + p.accepted})`;
-  if (stale) return `📝 Proposal of the older version (${p.pending + p.accepted} undecided)`;
-  return p.pending ? `📝 Proposal (${p.pending} awaiting decision)` : `📝 Proposal (${p.accepted} to publish)`;
+  if (p.decision) return (p.decision === "approve" ? "approved" : "changes requested") + " · " + pub;
+  if (!p.waiting) return p.posted ? pub : "proposal settled";
+  return `${p.pending + p.accepted} comments undecided`;
 }
 
+// ---- rows -------------------------------------------------------------------
 function entryRow(e) {
+  const s = entryState(e);
   const logURL = e.log_id ? `/log?t=${T}&job=${e.log_id}` : null;
-  const actions = [];
-  if (e.busy) {
-    actions.push(h("a", { class: "btn", href: logURL, target: "_blank" }, "👁 Live view"));
-    actions.push(h("button", { onclick: () => act("cancel", { url: e.url }) }, "⏹ Cancel"));
-  } else {
-    e.agents.forEach((a, i) => {
-      const again = e.status === "done" || e.status === "failed";
-      actions.push(h("button", { class: i === 0 ? "primary" : "", title: a.method,
-        onclick: (ev) => { ev.target.disabled = true; act("analyze", { url: e.url, agent: a.name }); } },
-        (i === 0 ? (e.stale ? "⟳ Review the new commits" : again ? "▶ Review again" : "▶ Review") : "▷ with") + " " + a.label));
-    });
-    if (logURL) actions.push(h("a", { class: "btn", href: logURL, target: "_blank" }, "📜 Run log"));
-  }
-  if (e.proposal && e.log_id) {
-    const hot = e.proposal.waiting && !e.stale;
-    actions.push(h("a", { class: "btn" + (hot ? " primary" : ""), href: `/review?t=${T}&job=${e.log_id}`, target: "_blank", style: hot ? "color:#fff" : null }, propLabel(e.proposal, true, e.stale)));
-  }
-  if (e.brief && e.log_id && !e.busy) actions.push(chatBtn(e.log_id));
-  if (e.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: e.url }) }, e.stale ? "📄 Brief ⟳" : "📄 Brief"));
-  if (e.guess) actions.push(h("button", { title: e.guess, onclick: () => act("map", { url: e.url }) }, "🔗 Map clone"));
-  if (e.urgent && !e.acked) actions.push(h("button", { class: "volt", onclick: () => act("ack", { url: e.url }) }, "🔕 OK"));
-  if (!e.busy) actions.push(e.status === "skipped"
-    ? h("button", { onclick: () => act("unskip", { url: e.url }) }, "↩ Restore")
-    : h("button", { title: "Don't ask again until there are new commits", onclick: () => act("skip", { url: e.url }) }, "🔕 Skip"));
+  const reviewURL = e.log_id ? `/review?t=${T}&job=${e.log_id}` : null;
+  const [first, ...others] = e.agents || [];
+  const review = (a, label) => btn("soft wide", label, () => act("analyze", { url: e.url, agent: a.name }), a.method);
+  const busy = s.k === "running" || s.k === "queued";
 
-  const who = [e.requested && "reviewer", e.assigned && "assignee"].filter(Boolean).join(", ");
-  return h("div", { class: "row" + (e.urgent ? " urgent" : "") + (e.status === "skipped" ? " skipped" : "") },
-    h("span", { class: "st " + (e.busy && e.status !== "queued" ? "running" : e.stale && !e.busy ? "stale" : e.status), title: e.stale ? "The author pushed after your review — the brief is about an older commit" : null },
-      e.stale && !e.busy ? "⟳ new commits"
-        : e.status === "done" && e.proposal && e.proposal.waiting ? "📝 awaiting decision"
-        : e.status === "failed" && e.proposal ? "📝 done · re-run failed" : (STATUS[e.status] || e.status)),
-    h("div", { class: "title" },
-      h("div", {}, h("span", { class: "ref" }, e.ref), h("a", { href: e.url, target: "_blank", rel: "noopener" }, e.title)),
-      h("div", { class: "meta" },
-        author(e.author), who ? h("span", {}, who) : null, files(e.files),
-        e.urgent ? h("span", { class: "why" }, "⚡ " + e.urgent_why + (e.acked ? " (acknowledged)" : "")) : null,
-        e.stale ? h("span", { class: "stale" }, "⟳ pushed after your review" + (e.proposal && e.proposal.posted ? ` (you published ${e.proposal.posted}/${e.proposal.total})` : "")) : null,
-        e.method ? h("span", {}, e.method) : null,
-        e.status === "failed" && e.error ? h("span", { class: "err", title: e.error }, e.error.slice(0, 120)) : null,
-        e.status === "noclone" ? h("span", { class: "err" }, "no local clone — add one in Settings") : null)),
-    h("div", { class: "actions" }, actions));
+  let main = [];
+  switch (s.k) {
+    case "decide": main = [link("primary wide", reviewURL, `📝 Decide (${e.proposal.pending + e.proposal.accepted})`, "Accept, edit or reject the proposed comments, then publish")]; break;
+    case "stale": main = [first ? review(first, "⟳ Review new commits") : null]; break;
+    case "running": case "queued": main = [link("soft wide", logURL, s.k === "running" ? "👁 Live view" : "👁 In the queue"), btn("", "⏹", () => act("cancel", { url: e.url }), "Cancel the review")]; break;
+    case "failed": main = [first ? review(first, "↻ Retry") : null]; break;
+    case "approved": case "changes": case "done": main = [reviewURL && e.proposal ? link("wide", reviewURL, "📝 Proposal") : e.brief ? btn("wide", "📄 Brief", () => act("open_brief", { url: e.url })) : null]; break;
+    case "skipped": main = [btn("wide", "↩ Restore", () => act("unskip", { url: e.url }), "Ask about it again")]; break;
+    case "noclone": main = [e.guess ? btn("soft wide", "🔗 Map clone", () => act("map", { url: e.url }), e.guess) : null]; break;
+    default: main = [first ? review(first, "▶ Review") : null];
+  }
+  if (e.urgent && !e.acked) main.unshift(btn("volt", "🔕", () => act("ack", { url: e.url }), "Acknowledge: stop the sparking"));
+
+  const menu = more(e.url, [
+    !busy && first && !["new", "stale", "failed"].includes(s.k) ? item(`▶ Review again with ${first.label}`, () => act("analyze", { url: e.url, agent: first.name })) : null,
+    !busy ? others.map((a) => item(`▷ Review with ${a.label}`, () => act("analyze", { url: e.url, agent: a.name }), a.method)) : null,
+    h("hr"),
+    reviewURL && e.proposal && !["decide", "done", "approved", "changes"].includes(s.k) ? itemLink("📝 Proposal (" + propLabel(e.proposal) + ")", reviewURL) : null,
+    e.brief && e.log_id ? itemLink("💬 Chat about the review", `/review?t=${T}&job=${e.log_id}#chat`) : null,
+    e.brief ? item(e.stale ? "📄 Brief (older version)" : "📄 Brief", () => act("open_brief", { url: e.url })) : null,
+    logURL ? itemLink("📜 Run log", logURL) : null,
+    h("hr"),
+    e.guess && s.k !== "noclone" ? item("🔗 Map the found clone", () => act("map", { url: e.url }), e.guess) : null,
+    !busy && s.k !== "skipped" ? item("🔕 Skip until new commits", () => act("skip", { url: e.url })) : null,
+  ]);
+
+  const who = [e.requested && "reviewer", e.assigned && "assignee"].filter(Boolean).join(" · ");
+  const p = e.proposal;
+  return row({ s, cls: e.urgent ? "urgent" : "", ref: e.ref, title: e.title, url: e.url, main, menu, meta: [
+    author(e.author), who ? h("span", { class: "tag" }, who) : null, e.draft ? h("span", { class: "tag" }, "draft") : null, files(e.files),
+    e.urgent ? h("span", { class: "why" }, "⚡ " + e.urgent_why + (e.acked ? " (acknowledged)" : "")) : null,
+    p && s.k !== "decide" && (p.posted || p.decision) ? h("span", {}, propLabel(p)) : null,
+    s.k === "stale" && p && p.posted ? h("span", {}, "your comments are on the older version") : null,
+    s.k === "failed" ? h("span", { class: "err", title: e.error }, shortErr(e.error) || "failed") : null,
+    e.status === "failed" && p ? h("span", { class: "muted", title: shortErr(e.error) }, "the last re-run failed") : null,
+    s.k === "noclone" && !e.guess ? h("span", { class: "err" }, "add the clone in Settings") : null,
+    e.method && !["new", "noclone"].includes(s.k) ? h("span", { class: "muted" }, e.method) : null,
+  ] });
 }
 
-let lastJSON = "";
+// otherRow is an open PR/MR nobody asked you about: look at it, or review it anyway.
+function otherRow(o) {
+  const logURL = o.log_id ? `/log?t=${T}&job=${o.log_id}` : null;
+  const reviewURL = o.log_id ? `/review?t=${T}&job=${o.log_id}` : null;
+  const s = o.busy ? { k: "running", label: "● Reviewing", who: AGENT }
+    : o.status === "done" ? { k: "done", label: "✓ Reviewed", who: NOBODY }
+    : o.status === "failed" ? { k: "failed", label: "✕ Review failed", who: NOBODY }
+    : { k: "other", label: o.draft ? "Draft" : "Not for you", who: NOBODY };
+  const main = o.busy ? [link("soft wide", logURL, "👁 Live view"), btn("", "⏹", () => act("cancel", { url: o.url }), "Cancel the review")]
+    : o.status === "done" && reviewURL ? [link("wide", reviewURL, "📝 Proposal")]
+    : o.clone ? [btn("wide", "▶ Review anyway", () => act("review_open", { url: o.url }), "Nobody asked you — review it anyway (read-only, nothing is published)")] : [];
+  const menu = more(o.url, o.busy ? [] : [
+    o.clone && o.status === "done" ? item("▶ Review again", () => act("review_open", { url: o.url })) : null,
+    o.brief && o.log_id ? itemLink("💬 Chat about the review", `/review?t=${T}&job=${o.log_id}#chat`) : null,
+    o.brief ? item("📄 Brief", () => act("open_brief", { url: o.url })) : null,
+    logURL ? itemLink("📜 Run log", logURL) : null,
+  ]);
+  return row({ s, cls: "other", ref: o.ref, title: o.title, url: o.url, main, menu, meta: [
+    author(o.author), o.draft ? h("span", { class: "tag" }, "draft") : null,
+    !o.clone ? h("span", { class: "muted" }, "no local clone — can't review here") : null] });
+}
+
+// ---- tabs -------------------------------------------------------------------
+// One tab per project (counting what waits for you), then the history, the
+// worktrees and pinning. The choice is kept per browser.
+// want is the tab you picked; tab is the one shown (the first project while
+// yours is not in the list yet, e.g. before the first check).
+let want = store.get("tab", ""), tab = want;
+const hashTab = { "#history": "history", "#pin": "pin", "#worktrees": "trees" }[location.hash];
+if (hashTab) { want = tab = hashTab; history.replaceState(null, "", location.pathname + location.search); }
+const SPECIAL = ["history", "trees", "pin"];
+
+const visibleRepos = (m) => (m.repos || []).filter((r) => r.entries.length || r.pinned);
+function repoCounts(r) {
+  const ready = r.entries.filter((e) => !e.draft);
+  return { ready: ready.length, decide: ready.filter((e) => entryState(e).k === "decide").length, urgent: r.urgent };
+}
+function fixTab(m) {
+  const keys = visibleRepos(m).map((r) => "repo:" + r.key);
+  tab = keys.includes(want) || SPECIAL.includes(want) ? want : keys[0] || (m.polled_at ? "history" : "");
+}
+function setTab(key) { want = key; store.set("tab", key); menuOpen = null; render(M, true); }
+
+function renderTabs(m) {
+  const t = (key, label, ...badges) => h("button", { class: key === tab ? "on" : "", onclick: () => setTab(key) }, label, ...badges);
+  const n = (v, cls = "", title) => v ? h("span", { class: "n " + cls, title }, v) : null;
+  $("#tabs").replaceChildren(
+    ...visibleRepos(m).map((r) => {
+      const c = repoCounts(r);
+      return t("repo:" + r.key, (r.pinned ? "📌 " : "") + r.short,
+        c.urgent ? n("⚡" + c.urgent, "urgent", "urgent") : null,
+        c.decide ? n("📝" + c.decide, "decide", "waiting for your decision") : null,
+        h("span", { class: "n", title: "waiting for you (drafts not counted)" }, c.ready));
+    }),
+    h("span", { class: "sep" }),
+    t("history", "📚 History", n((m.history || []).length)),
+    ...((m.worktrees || []).length ? [t("trees", "🌳 Worktrees", n(m.worktrees.length))] : []),
+    t("pin", "📌 Pin a project"));
+}
+
+// ---- views ------------------------------------------------------------------
+// shown: projects whose "other PR/MRs" group is unfolded.
+const shown = new Set(store.get("open", []));
+
+function repoView(r) {
+  const ready = r.entries.filter((e) => !e.draft).sort((a, b) => (b.urgent - a.urgent) || (entryState(a).n - entryState(b).n));
+  const myDrafts = r.entries.filter((e) => e.draft);
+  const others = r.all.filter((o) => !o.queued);
+  const inline = r.inline ? others.filter((o) => !o.draft) : [];
+  const folded = r.inline ? others.filter((o) => o.draft) : others;
+  const tools = [];
+  if (r.all.length) tools.push(h("button", { title: r.inline ? "Fold the PR/MRs not waiting for you" : "List the PR/MRs not waiting for you right here (drafts stay folded)",
+    onclick: () => act("show_all", { url: r.key, on: !r.inline }) }, r.inline ? "↕ Fold the others" : "↕ List the others"));
+  tools.push(h("button", { title: r.pinned ? "Show the project only when something waits for you" : "Always show the project, with all its PR/MRs",
+    onclick: () => act(r.pinned ? "unpin" : "pin", { url: r.key }) }, r.pinned ? "📌 Unpin" : "📌 Pin"));
+  const card = h("section", { class: "card" },
+    h("div", { class: "card-head" },
+      h("a", { class: "name", href: r.list_url, target: "_blank", rel: "noopener", title: "Open the list on the forge" }, r.key),
+      h("span", { class: "sub" }, [r.open >= 0 ? `${r.open} open` : null, `${ready.length} for you`, r.mode === "open" ? "all open PR/MRs" : "where you are asked"].filter(Boolean).join(" · ")),
+      h("span", { class: "tools" }, tools)),
+    ready.map(entryRow));
+  if (!ready.length) card.append(h("div", { class: "none" }, "✓ Nothing ready waits for you here" + (r.open === 0 ? " — no open PR/MRs" : "")));
+  if (inline.length) card.append(h("div", { class: "group" }, `Other open PR/MRs — not for you (${inline.length})`), ...inline.map(otherRow));
+  const n = myDrafts.length + folded.length;
+  if (n) {
+    const open = shown.has(r.key);
+    const drafts = myDrafts.length + folded.filter((o) => o.draft).length;
+    const what = r.inline ? `Drafts (${n})` : `Other open PR/MRs (${n})` + (drafts ? ` · ${drafts} draft` : "");
+    card.append(h("button", { class: "group", onclick: () => { open ? shown.delete(r.key) : shown.add(r.key); store.set("open", [...shown]); render(M, true); } },
+      (open ? "▾ " : "▸ ") + what));
+    if (open) card.append(...myDrafts.map(entryRow), ...folded.map(otherRow));
+  }
+  return card;
+}
+
+function historyView(m) {
+  const hist = m.history || [];
+  if (!hist.length) return h("div", { class: "empty" }, "No reviewed PR/MRs yet.");
+  return h("section", { class: "card" },
+    h("div", { class: "card-head" }, h("span", { class: "name" }, "Reviewed — nothing waits for you"), h("span", { class: "sub" }, `${hist.length} PR/MRs`)),
+    hist.map((x) => {
+      const p = x.proposal;
+      // what you did decides the label; whether it is still in your queue is a detail
+      const s = p && p.decision === "approve" ? { k: "approved", label: "✓ Approved", who: NOBODY }
+        : p && p.decision ? { k: "changes", label: "✕ Changes requested", who: AUTHOR }
+        : p && p.posted ? { k: "done", label: "✓ Commented", who: AUTHOR }
+        : { k: "done", label: "✓ Reviewed", who: NOBODY };
+      const reviewURL = x.log_id ? `/review?t=${T}&job=${x.log_id}` : null;
+      return row({ s, ref: `${x.repo} ${x.ref}`, title: x.title, url: x.url,
+        main: [p && reviewURL ? link("wide", reviewURL, "📝 Proposal") : x.brief ? btn("wide", "📄 Brief", () => act("open_brief", { url: x.url })) : null],
+        menu: more("h:" + x.url, [
+          x.brief && x.log_id ? itemLink("💬 Chat about the review", `/review?t=${T}&job=${x.log_id}#chat`) : null,
+          x.brief && p ? item("📄 Brief", () => act("open_brief", { url: x.url })) : null,
+          x.log_id ? itemLink("📜 Run log", `/log?t=${T}&job=${x.log_id}`) : null]),
+        meta: [h("span", {}, x.when), p ? h("span", {}, propLabel(p)) : null,
+          p && p.waiting && !x.open ? h("span", { class: "muted" }, "left undecided") : null,
+          !x.open ? h("span", { class: "tag", title: "merged, closed, approved by you or no longer asking you" }, "out of your queue") : null,
+          x.method ? h("span", { class: "muted" }, x.method) : null] });
+    }));
+}
+
+function treesView(m) {
+  const ts = m.worktrees || [];
+  if (!ts.length) return h("div", { class: "empty" }, "No worktrees — Codex reviews and the chat make one per PR/MR.");
+  return h("section", { class: "card" },
+    h("div", { class: "card-head" }, h("span", { class: "name" }, "Worktrees"), h("span", { class: "sub" }, `removed when the PR/MR is merged or closed, or after ${m.keep_for} unused`)),
+    ts.map((w) => {
+      const rm = btn("wide", "🗑 Remove", () => act("worktree_remove", { url: w.id }), "Delete the checkout (the chat puts it back when needed)");
+      rm.disabled = w.busy;
+      return row({ s: w.busy ? { k: "running", label: "● In use", who: AGENT } : { k: "done", label: "Kept", who: NOBODY },
+        ref: `${w.repo} ${w.ref}`, title: w.title, url: w.url, main: [rm],
+        menu: more("w:" + w.id, [itemLink("💬 Chat about the review", `/review?t=${T}&job=${w.id}#chat`)]),
+        meta: [h("span", {}, "at " + w.sha), h("span", {}, w.size), h("span", {}, "used " + w.used), h("span", { class: "muted", title: w.path }, w.path)] });
+    }));
+}
+
+// Pin a project: search the config, the scanned clones and the forges'
+// member projects, or paste a project URL.
+let pinQ = "", pinTimer = null, pinSeq = 0, pinList = null, pinErrs = null, pinLoading = false;
+function pinView() {
+  const input = h("input", { id: "pinQ", placeholder: "Search your projects, or paste a project / MR URL (gitlab.example.com/team/app)", value: pinQ,
+    oninput: (e) => { pinQ = e.target.value; clearTimeout(pinTimer); pinTimer = setTimeout(searchPins, 350); } });
+  const rows = (pinList || []).map((p) => h("div", { class: "prow" },
+    h("span", { class: "key" }, (p.pinned ? "📌 " : "") + p.key),
+    h("span", { class: "from" }, { config: "in config", clone: "clone " + (p.clone || ""), forge: "member", typed: "typed" }[p.from] || p.from),
+    h("button", { class: p.pinned ? "" : "primary", onclick: async (ev) => {
+      ev.currentTarget.disabled = true;
+      await act(p.pinned ? "unpin" : "pin", { url: p.key });
+      setTimeout(searchPins, 600);
+    } }, p.pinned ? "📌 Unpin" : "📌 Pin")));
+  const sec = h("section", { class: "pin" },
+    h("h2", {}, "📌 Pin a project"),
+    h("div", { class: "muted" }, "A pinned project gets its own tab even when nothing in it waits for you — handy when nobody assigns reviewers. PR/MRs you are asked about show as usual; the rest is listed under “Other open PR/MRs”."),
+    input,
+    pinLoading ? h("div", { class: "muted" }, "Searching…") : null,
+    pinErrs && pinErrs.length ? h("div", { class: "err" }, "⚠ " + pinErrs.join(" · ")) : null,
+    pinList && !pinList.length && !pinLoading ? h("div", { class: "muted" }, "No project matches.") : null,
+    rows);
+  requestAnimationFrame(() => { if (document.activeElement === document.body || document.activeElement === null) { const at = input.value.length; input.focus(); input.setSelectionRange(at, at); } });
+  return sec;
+}
+function showPin() {
+  if (tab !== "pin") return;
+  const had = document.activeElement && document.activeElement.id === "pinQ";
+  $("#view").replaceChildren(pinView());
+  if (had) { const i = $("#pinQ"); const at = i.value.length; i.focus(); i.setSelectionRange(at, at); }
+}
+async function searchPins() {
+  const seq = ++pinSeq;
+  pinLoading = true; showPin();
+  try {
+    const r = await api("/api/panel/projects?q=" + encodeURIComponent(pinQ));
+    if (seq === pinSeq) { pinList = r.projects || []; pinErrs = r.errors || []; }
+  } catch (e) { if (seq === pinSeq) { pinList = []; pinErrs = [e.message]; } }
+  if (seq === pinSeq) { pinLoading = false; showPin(); }
+}
+
+// ---- refresh ------------------------------------------------------------------
+let M = null;
 async function refresh(force) {
   let m;
   try { m = await api("/api/panel"); }
@@ -248,30 +527,43 @@ async function refresh(force) {
 let timer = null;
 function schedule(ms) { clearTimeout(timer); timer = setTimeout(refresh, ms); }
 
-// Each part of the page is redrawn only when its own data changed, and then
-// whole, in one go: a poll that only moves the "checked" time or a worktree's
-// "used" does not rebuild (and fold, or jump) the PR/MR list.
+// Each part is redrawn only when its own data changed, and then whole, in
+// one go: a poll that only moves the "checked" time rebuilds (and folds, or
+// jumps) nothing. The pin search redraws only on its own.
 let last = {};
 function render(m, force) {
+  M = m;
+  fixTab(m);
+  const repo = visibleRepos(m).find((r) => "repo:" + r.key === tab);
   const parts = {
     head: JSON.stringify({ ...m, repos: null, history: null, worktrees: null }),
-    repos: JSON.stringify([m.repos, m.total, !!m.polled_at]),
-    history: JSON.stringify(m.history),
-    trees: JSON.stringify([m.worktrees, m.keep_for]),
+    tabs: JSON.stringify([tab, visibleRepos(m).map((r) => [r.key, r.short, r.pinned, repoCounts(r)]), (m.history || []).length, (m.worktrees || []).length]),
+    view: JSON.stringify([tab, tab === "history" ? m.history : tab === "trees" ? [m.worktrees, m.keep_for] : tab === "pin" ? null : repo, !!m.polled_at]),
   };
   const changed = (k) => force || parts[k] !== last[k];
   if (changed("head")) renderHead(m);
-  if (changed("repos")) renderRepos(m);
-  if (changed("history")) renderHistory(m);
-  if (changed("trees")) renderTrees(m);
+  if (changed("tabs")) renderTabs(m);
+  if (changed("view") && !(tab === "pin" && last.view === parts.view)) renderView(m);
   last = parts;
+}
+
+function renderView(m) {
+  if (tab === "pin") { showPin(); if (pinList == null && !pinLoading) searchPins(); return; }
+  let v;
+  if (tab === "history") v = historyView(m);
+  else if (tab === "trees") v = treesView(m);
+  else {
+    const r = visibleRepos(m).find((x) => "repo:" + x.key === tab);
+    v = r ? repoView(r) : h("div", { class: "empty" }, m.polled_at ? "✓ Nothing is waiting for your review" : "First check in progress…");
+  }
+  $("#view").replaceChildren(v); // built first, swapped in at once
 }
 
 function renderHead(m) {
   const urgentLive = m.unacked > 0;
   setIcon(urgentLive ? ICON_BOLT : ICON_LENS);
   document.title = (urgentLive ? `⚡${m.unacked} · ` : "") + `(${m.total}) Juhas — Panel`;
-  const stats = $("#stats"); stats.replaceChildren(...[
+  $("#stats").replaceChildren(...[
     h("span", { class: "pill" }, `${m.total} to review`),
     m.urgent ? h("span", { class: "pill urgent" }, `⚡ ${m.urgent} urgent`) : null,
     m.running ? h("span", { class: "pill live" }, `● ${m.running} running`) : null,
@@ -288,178 +580,6 @@ function renderHead(m) {
   $("#tgZap").checked = m.screen_effect;
   $("#tgAuto").checked = m.autostart;
   $("#errors").replaceChildren(...(m.errors.length ? [h("div", { class: "errors" }, "⚠ Fetch errors: ", m.errors.join(" · "))] : []));
-}
-
-function renderRepos(m) {
-  const list = [];
-  if (!m.total) list.push(h("div", { class: "empty" }, m.polled_at ? "✓ Nothing is waiting for your review" : "First check in progress…"));
-  for (const r of m.repos || []) {
-    if (!r.entries.length && !r.pinned) continue;
-    list.push(repoSection(r));
-  }
-  $("#repos").replaceChildren(...list); // built first, swapped in at once
-}
-
-// open: repos whose folded "Show all" is expanded (kept across refreshes)
-const open = new Set();
-try { for (const k of JSON.parse(localStorage.getItem("juhas.open") || "[]")) open.add(k); } catch (_) {}
-const saveOpen = () => { try { localStorage.setItem("juhas.open", JSON.stringify([...open])); } catch (_) {} };
-
-// repoSection: what waits for you and is ready on top; drafts (yours or
-// not) and, unless the repo lists them inline, the others go under the fold.
-function repoSection(r) {
-  const ready = r.entries.filter((e) => !e.draft), myDrafts = r.entries.filter((e) => e.draft);
-  const others = r.all.filter((o) => !o.queued);
-  const inline = r.inline ? others.filter((o) => !o.draft) : [];
-  const folded = r.inline ? others.filter((o) => o.draft) : others;
-  const drafts = myDrafts.length + folded.filter((o) => o.draft).length;
-  const tools = [];
-  if (r.all.length) tools.push(h("button", { title: r.inline ? "Fold the PR/MRs not waiting for you under “Show all”, so the list stays short" : "List the PR/MRs not waiting for you right here (drafts stay folded)",
-    onclick: () => act("show_all", { url: r.key, on: !r.inline }) }, r.inline ? "↕ Fold the others" : "↕ List the others"));
-  tools.push(h("button", { title: r.pinned ? "Show the repo only when something waits for you" : "Always show the repo, with all its PR/MRs",
-    onclick: () => act(r.pinned ? "unpin" : "pin", { url: r.key }) }, r.pinned ? "📌 Unpin" : "📌 Pin"));
-  const sec = h("section", { class: "repo" },
-    h("div", { class: "repo-head" },
-      h("a", { href: r.list_url, target: "_blank", rel: "noopener" }, (r.pinned ? "📌 " : "") + r.short),
-      h("span", { class: "muted" }, [r.open >= 0 ? `${r.open} open` : null, `${ready.length} for me`, myDrafts.length ? `${myDrafts.length} draft` : null, r.mode].filter(Boolean).join(" · ")),
-      r.urgent ? h("span", { class: "pill urgent" }, `⚡ ${r.urgent}`) : null,
-      h("span", { class: "tools" }, tools)),
-    ready.map(entryRow));
-  if (!ready.length) sec.append(h("div", { class: "none" }, "✓ Nothing ready waits for you" + (r.open === 0 ? " — no open PR/MRs" : "")));
-  sec.append(...inline.map(otherRow));
-  const n = myDrafts.length + folded.length;
-  if (!n) return sec;
-  const shown = open.has(r.key);
-  const what = r.inline ? `📝 Show drafts — ${n}` : `📋 Show all PR/MRs — ${n} more` + (drafts ? ` (${drafts} draft)` : "") + ", not ready for you";
-  sec.append(h("button", { class: "others-toggle", onclick: () => { shown ? open.delete(r.key) : open.add(r.key); saveOpen(); refresh(true); } },
-    shown ? `▾ Hide (${n})` : what));
-  if (shown) sec.append(...myDrafts.map(entryRow), ...folded.map(otherRow));
-  return sec;
-}
-
-// chatBtn opens the review page with the chat about the PR/MR.
-const chatBtn = (id) => h("a", { class: "btn", title: "Ask the agent about its review (local, nothing is published)", href: `/review?t=${T}&job=${id}#chat`, target: "_blank" }, "💬 Chat");
-
-// otherRow is an open PR/MR nobody asked you about: look at it, or review it anyway.
-function otherRow(o) {
-  const logURL = o.log_id ? `/log?t=${T}&job=${o.log_id}` : null;
-  const actions = [];
-  if (o.busy) {
-    if (logURL) actions.push(h("a", { class: "btn", href: logURL, target: "_blank" }, "👁 Live view"));
-    actions.push(h("button", { onclick: () => act("cancel", { url: o.url }) }, "⏹ Cancel"));
-  } else if (o.clone) {
-    actions.push(h("button", { title: "Review it although nobody asked you (read-only, nothing is published)",
-      onclick: (ev) => { ev.target.disabled = true; act("review_open", { url: o.url }); } }, o.status === "done" ? "▶ Review again" : "▶ Review"));
-  }
-  if (o.log_id && o.status === "done") actions.push(h("a", { class: "btn", href: `/review?t=${T}&job=${o.log_id}`, target: "_blank" }, "📝 Proposal"));
-  if (o.brief && o.log_id && !o.busy) actions.push(chatBtn(o.log_id));
-  if (o.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: o.url }) }, "📄 Brief"));
-  if (logURL && !o.busy) actions.push(h("a", { class: "btn", href: logURL, target: "_blank" }, "📜 Run log"));
-  const st = o.busy ? "running" : o.status || "";
-  return h("div", { class: "row other" },
-    h("span", { class: "st " + st }, st ? (STATUS[st] || st) : "not for you"),
-    h("div", { class: "title" },
-      h("div", {}, h("span", { class: "ref" }, o.ref), h("a", { href: o.url, target: "_blank", rel: "noopener" }, o.title)),
-      h("div", { class: "meta" }, author(o.author), o.draft ? h("span", { class: "draft" }, "draft") : null,
-        !o.clone ? h("span", { class: "muted" }, "no local clone — can't review here") : null)),
-    h("div", { class: "actions" }, actions));
-}
-
-// Pin a project: search the config, the scanned clones and the forges'
-// member projects, or paste a project URL.
-let pinShown = location.hash === "#pin", pinQ = "", pinTimer = null, pinSeq = 0;
-function renderPin(list, errs, loading) {
-  const box = $("#pinbox"); box.replaceChildren();
-  box.append(h("button", { id: "pinToggle", onclick: () => { pinShown = !pinShown; renderPin(); if (pinShown) searchPins(); } },
-    pinShown ? "▾ Hide “Pin a project”" : "📌 Pin a project — always show it, with all its PR/MRs"));
-  if (!pinShown) return;
-  const input = h("input", { id: "pinQ", placeholder: "Search your projects, or paste a project / MR URL (gitlab.example.com/team/app)", value: pinQ,
-    oninput: (e) => { pinQ = e.target.value; clearTimeout(pinTimer); pinTimer = setTimeout(searchPins, 350); } });
-  const rows = (list || []).map((p) => h("div", { class: "prow" },
-    h("span", { class: "key" }, (p.pinned ? "📌 " : "") + p.key),
-    h("span", { class: "from" }, { config: "in config", clone: "clone " + (p.clone || ""), forge: "member", typed: "typed" }[p.from] || p.from),
-    h("button", { class: p.pinned ? "" : "primary", onclick: async (ev) => {
-      ev.target.disabled = true;
-      await act(p.pinned ? "unpin" : "pin", { url: p.key });
-      setTimeout(searchPins, 600);
-    } }, p.pinned ? "📌 Unpin" : "📌 Pin")));
-  box.append(h("section", { class: "pin", id: "pin" },
-    h("h2", {}, "📌 Pin a project"),
-    h("div", { class: "muted" }, "A pinned project stays in the menu and here even when nothing in it waits for you — handy when nobody assigns reviewers. PR/MRs you are asked to review still show as usual; the rest goes under “Show all” (or right in the list: ↕)."),
-    input,
-    loading ? h("div", { class: "muted" }, "Searching…") : null,
-    errs && errs.length ? h("div", { class: "err" }, "⚠ " + errs.join(" · ")) : null,
-    list && !list.length && !loading ? h("div", { class: "muted" }, "No project matches.") : null,
-    rows));
-  if (location.hash === "#pin") { input.scrollIntoView(); history.replaceState(null, "", location.pathname + location.search); }
-  const at = input.value.length; input.focus(); input.setSelectionRange(at, at); // re-rendered while typing
-}
-async function searchPins() {
-  const seq = ++pinSeq;
-  renderPin(null, null, true);
-  try {
-    const r = await api("/api/panel/projects?q=" + encodeURIComponent(pinQ));
-    if (seq === pinSeq) renderPin(r.projects || [], r.errors || []);
-  } catch (e) { if (seq === pinSeq) renderPin([], [e.message]); }
-}
-renderPin();
-if (pinShown) searchPins();
-
-let showHistory = location.hash === "#history";
-try { if (!showHistory) showHistory = localStorage.getItem("juhas.history") === "1"; } catch (_) {}
-
-function renderHistory(m) {
-  const box = $("#history"); box.replaceChildren();
-  const hist = m.history || [];
-  if (!hist.length) return;
-  box.append(h("button", { id: "histToggle", onclick: () => {
-    showHistory = !showHistory;
-    try { localStorage.setItem("juhas.history", showHistory ? "1" : "0"); } catch (_) {}
-    renderHistory(m);
-  } }, showHistory ? `▾ Hide history (${hist.length})` : `📚 Show history (${hist.length})`));
-  if (!showHistory) return;
-  box.append(h("section", { class: "history", id: "history" },
-    h("h2", {}, "Reviewed history — PR/MRs not waiting for you"),
-    hist.map((x) => {
-      const actions = [];
-      if (x.proposal && x.log_id) actions.push(h("a", { class: "btn", href: `/review?t=${T}&job=${x.log_id}`, target: "_blank" }, propLabel(x.proposal, x.open)));
-      if (x.brief && x.log_id) actions.push(chatBtn(x.log_id));
-      if (x.brief) actions.push(h("button", { onclick: () => act("open_brief", { url: x.url }) }, "📄 Brief"));
-      if (x.log_id) actions.push(h("a", { class: "btn", href: `/log?t=${T}&job=${x.log_id}`, target: "_blank" }, "📜 Run log"));
-      return h("div", { class: "hrow" },
-        h("span", { class: "when" }, x.when),
-        h("div", { class: "title" },
-          h("div", {}, h("span", { class: "ref" }, `${x.repo} ${x.ref}`), " ", h("a", { href: x.url, target: "_blank", rel: "noopener" }, x.title)),
-          h("div", { class: "meta" }, x.method ? h("span", {}, x.method) : null,
-            x.open ? h("span", {}, "open, unchanged since review") : h("span", { class: "closed" }, "out of the queue (merged / closed / not for me)"))),
-        h("div", { class: "actions" }, actions));
-    })));
-  if (location.hash === "#history") { document.getElementById("history").scrollIntoView(); history.replaceState(null, "", location.pathname + location.search); }
-}
-
-// Worktrees: per-PR/MR checkouts kept for Codex reviews and the chat.
-let showTrees = false;
-try { showTrees = localStorage.getItem("juhas.trees") === "1"; } catch (_) {}
-function renderTrees(m) {
-  const box = $("#trees"); box.replaceChildren();
-  const ts = m.worktrees || [];
-  if (!ts.length) return;
-  box.append(h("button", { id: "treesToggle", onclick: () => {
-    showTrees = !showTrees;
-    try { localStorage.setItem("juhas.trees", showTrees ? "1" : "0"); } catch (_) {}
-    renderTrees(m);
-  } }, showTrees ? `▾ Hide worktrees (${ts.length})` : `🌳 Worktrees (${ts.length})`));
-  if (!showTrees) return;
-  box.append(h("section", { class: "history" },
-    h("h2", {}, `Worktrees — removed when the PR/MR is merged or closed, or after ${m.keep_for} unused`),
-    ts.map((w) => h("div", { class: "hrow" },
-      h("span", { class: "when" }, w.used),
-      h("div", { class: "title" },
-        h("div", {}, h("span", { class: "ref" }, `${w.repo} ${w.ref}`), " ", h("a", { href: w.url, target: "_blank", rel: "noopener" }, w.title)),
-        h("div", { class: "meta" }, h("span", {}, "at " + w.sha), h("span", {}, w.size), h("span", { title: w.path }, w.path), w.busy ? h("span", {}, "in use") : null)),
-      h("div", { class: "actions" },
-        h("a", { class: "btn", href: `/review?t=${T}&job=${w.id}#chat`, target: "_blank" }, "💬 Chat"),
-        h("button", { disabled: w.busy, title: "Delete the checkout (the chat puts it back when needed)", onclick: (ev) => { ev.target.disabled = true; act("worktree_remove", { url: w.id }); } }, "🗑 Remove"))))));
 }
 
 $("#tgZap").addEventListener("change", (e) => act("screen_effect", { on: e.target.checked }));
