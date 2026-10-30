@@ -279,3 +279,50 @@ func TestPublishGitLabApproveCurrentHead(t *testing.T) {
 		t.Errorf("calls:\n%s", b)
 	}
 }
+
+func TestMineGitHub(t *testing.T) {
+	fakeCLI(t, "gh", `cat <<'J'
+{"data":{"viewer":{"login":"me"},"search":{"issueCount":2,"pageInfo":{"hasNextPage":false},"nodes":[
+ {"url":"https://github.com/o/r/pull/1","number":1,"title":"ready","repository":{"nameWithOwner":"o/r"},"author":{"login":"me"},
+  "reviewDecision":"APPROVED","mergeable":"MERGEABLE","updatedAt":"2026-10-29T10:00:00Z",
+  "latestReviews":{"nodes":[{"state":"APPROVED","author":{"login":"a"}},{"state":"APPROVED","author":{"login":"b"}}]},
+  "commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"SUCCESS"}}}]},"reviewThreads":{"nodes":[{"isResolved":true}]}},
+ {"url":"https://github.com/o/r/pull/2","number":2,"title":"blocked","repository":{"nameWithOwner":"o/r"},"author":{"login":"me"},
+  "reviewDecision":"CHANGES_REQUESTED","mergeable":"CONFLICTING",
+  "commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"FAILURE"}}}]},"reviewThreads":{"nodes":[{"isResolved":false}]}}]}}}
+J`)
+	items, err := (&GitHubForge{host: "github.com"}).Mine(context.Background())
+	if err != nil || len(items) != 2 {
+		t.Fatalf("%v %+v", err, items)
+	}
+	a, b := items[0].Ready, items[1].Ready
+	if a.Review != ReviewApproved || a.Approvals != 2 || a.CI != CIPassed || a.Conflicts || a.Threads || a.Updated.IsZero() {
+		t.Errorf("ready: %+v", a)
+	}
+	if b.Review != ReviewChanges || b.CI != CIFailed || !b.Conflicts || !b.Threads {
+		t.Errorf("blocked: %+v", b)
+	}
+}
+
+func TestMineGitLab(t *testing.T) {
+	fakeCLI(t, "glab", `
+case "$*" in
+  *" user"*) echo '{"username":"me"}';;
+  *"/merge_requests/1/approvals"*) echo '{"approved_by":[{"user":{"username":"a"}}],"approvals_left":0}';;
+  *"/merge_requests/2/approvals"*) echo '{"approved_by":[],"approvals_left":1}';;
+  *"author_username=me"*) echo '[
+    {"iid":1,"title":"ready","web_url":"https://gl.example/t/a/-/merge_requests/1","author":{"username":"me"},"references":{"full":"t/a!1"},"detailed_merge_status":"mergeable","blocking_discussions_resolved":true},
+    {"iid":2,"title":"waiting","web_url":"https://gl.example/t/a/-/merge_requests/2","author":{"username":"me"},"references":{"full":"t/a!2"},"detailed_merge_status":"ci_still_running","blocking_discussions_resolved":false}]';;
+esac`)
+	items, err := (&GitLabForge{host: "gl.example"}).Mine(context.Background())
+	if err != nil || len(items) != 2 {
+		t.Fatalf("%v %+v", err, items)
+	}
+	a, b := items[0].Ready, items[1].Ready
+	if a.Review != ReviewApproved || a.Approvals != 1 || a.Detail != "mergeable" || a.Threads {
+		t.Errorf("ready: %+v", a)
+	}
+	if b.Review != ReviewRequired || b.CI != CIRunning || !b.Threads || items[1].Repo != "gl.example/t/a" {
+		t.Errorf("waiting: %+v %s", b, items[1].Repo)
+	}
+}

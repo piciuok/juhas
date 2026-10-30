@@ -132,7 +132,21 @@ type panelModel struct {
 	Repos        []panelRepo    `json:"repos"`
 	History      []panelHistory `json:"history"`
 	Worktrees    []panelTree    `json:"worktrees"`
+	Mine         []panelMine    `json:"mine"`
 	KeepFor      string         `json:"keep_for"` // worktrees.keep_for
+}
+
+// panelMine is one of my own PR/MRs and how ready it is.
+type panelMine struct {
+	URL     string       `json:"url"`
+	Repo    string       `json:"repo"`
+	Ref     string       `json:"ref"`
+	Title   string       `json:"title"`
+	Draft   bool         `json:"draft"`
+	Target  string       `json:"target"`
+	Age     string       `json:"age"`     // since opened
+	Updated string       `json:"updated"` // last activity
+	Ready   *forge.Ready `json:"ready"`
 }
 
 // panelTree is a kept per-PR/MR worktree.
@@ -189,6 +203,17 @@ func (a *App) PanelModel() any {
 	for _, w := range review.Worktrees() {
 		m.Worktrees = append(m.Worktrees, panelTree{ID: w.ID, URL: w.URL, Repo: app.ShortRepo(w.Repo), Ref: w.Ref, Title: w.Title,
 			SHA: shortSHA(w.SHA), Path: w.Path, Size: humanSize(w.Bytes), Used: ago(w.Used), Busy: a.treeBusy(w)})
+	}
+	m.Mine = []panelMine{}
+	if snap != nil {
+		for _, it := range snap.Mine {
+			pm := panelMine{URL: it.URL, Repo: app.ShortRepo(it.Repo), Ref: it.Ref(), Title: it.Title, Draft: it.Draft,
+				Target: it.TargetBranch, Age: ago(it.CreatedAt), Ready: it.Ready}
+			if it.Ready != nil && !it.Ready.Updated.IsZero() {
+				pm.Updated = ago(it.Ready.Updated)
+			}
+			m.Mine = append(m.Mine, pm)
+		}
 	}
 	if snap == nil {
 		return m

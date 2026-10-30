@@ -166,6 +166,9 @@ configuration reference.
     *Check for updates*.
 - **Panel:** a browser page with the same queue that stays open while you click. A tab per project counts
   what waits for you (📝 decisions, ⚡ urgent); History, Worktrees and Pin a project have their own tabs.
+  The first tab, **👤 My PR/MRs**, lists your own open PR/MRs across every project and account with how
+  ready they are — conflicts, CI failing, changes requested, open threads, CI running, waiting for review,
+  ready to merge, draft — and whose move it is. No review runs for them; it is a quick look.
   Every row has the same columns in any state: the state and whose move it is (yours, the agent's, the
   author's), the title and details, then one main action (Decide, Review, Retry, Live view…) and a ⋯ menu with
   the rest. Rows needing you come first. Start at login and the kick preview are in Settings → General.

@@ -16,6 +16,7 @@ type fakeForge struct {
 	user      string
 	requested []forge.Item
 	open      map[string][]forge.Item
+	mine      []forge.Item
 	err       error
 }
 
@@ -44,6 +45,7 @@ func (f *fakeForge) ListOpen(_ context.Context, p string) ([]forge.Item, error) 
 	return f.open[p], nil
 }
 func (f *fakeForge) Get(context.Context, string, int) (forge.Item, error) { return forge.Item{}, nil }
+func (f *fakeForge) Mine(context.Context) ([]forge.Item, error)           { return f.mine, nil }
 func (f *fakeForge) Projects(context.Context, string) ([]string, error)   { return nil, nil }
 
 var now = time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)

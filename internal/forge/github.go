@@ -37,6 +37,57 @@ const ghPRFields = `
   latestReviews(first: 20) { nodes { state author { login } } }
   files(first: 100) { totalCount nodes { changeType } }`
 
+// ghMineFields add what says whether my own PR is ready to merge.
+const ghMineFields = ghPRFields + `
+  reviewDecision mergeable updatedAt
+  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+  reviewThreads(first: 50) { nodes { isResolved } }`
+
+// Mine lists my open PRs, with review, CI, conflicts and open threads.
+func (g *GitHubForge) Mine(ctx context.Context) ([]Item, error) {
+	res, err := g.searchFields(ctx, "is:pr is:open archived:false author:@me", ghMineFields)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]Item, 0, len(res.Data.Search.Nodes))
+	for _, pr := range res.Data.Search.Nodes {
+		it := g.item(*pr, res.Data.Viewer.Login)
+		r := &Ready{Updated: pr.UpdatedAt, Conflicts: pr.Mergeable == "CONFLICTING"}
+		switch pr.ReviewDecision {
+		case "APPROVED":
+			r.Review = ReviewApproved
+		case "CHANGES_REQUESTED":
+			r.Review = ReviewChanges
+		case "REVIEW_REQUIRED":
+			r.Review = ReviewRequired
+		}
+		for _, rv := range pr.LatestReviews.Nodes {
+			if rv.State == "APPROVED" {
+				r.Approvals++
+			}
+		}
+		if r.Review == "" && r.Approvals > 0 {
+			r.Review = ReviewApproved // no required reviews on the repo
+		}
+		if n := pr.Commits.Nodes; len(n) > 0 && n[0].Commit.Rollup != nil {
+			switch n[0].Commit.Rollup.State {
+			case "SUCCESS":
+				r.CI = CIPassed
+			case "FAILURE", "ERROR":
+				r.CI = CIFailed
+			case "PENDING", "EXPECTED":
+				r.CI = CIRunning
+			}
+		}
+		for _, t := range pr.ReviewThreads.Nodes {
+			r.Threads = r.Threads || !t.IsResolved
+		}
+		it.Ready = r
+		items = append(items, it)
+	}
+	return items, nil
+}
+
 type ghPR struct {
 	URL         string    `json:"url"`
 	Number      int       `json:"number"`
@@ -76,6 +127,24 @@ type ghPR struct {
 			ChangeType string `json:"changeType"`
 		} `json:"nodes"`
 	} `json:"files"`
+	// only asked for my own PRs (ghMineFields)
+	ReviewDecision string    `json:"reviewDecision"`
+	Mergeable      string    `json:"mergeable"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+	Commits        struct {
+		Nodes []struct {
+			Commit struct {
+				Rollup *struct {
+					State string `json:"state"`
+				} `json:"statusCheckRollup"`
+			} `json:"commit"`
+		} `json:"nodes"`
+	} `json:"commits"`
+	ReviewThreads struct {
+		Nodes []struct {
+			IsResolved bool `json:"isResolved"`
+		} `json:"nodes"`
+	} `json:"reviewThreads"`
 	LatestReviews struct {
 		Nodes []struct {
 			State  string `json:"state"`
@@ -107,12 +176,16 @@ type ghSearch struct {
 
 // searchAll pages through a search (up to maxPages × 100 results).
 func (g *GitHubForge) searchAll(ctx context.Context, q string) (*ghSearch, error) {
+	return g.searchFields(ctx, q, ghPRFields)
+}
+
+func (g *GitHubForge) searchFields(ctx context.Context, q, fields string) (*ghSearch, error) {
 	var all *ghSearch
 	after := ""
 	for page := 0; page < maxPages; page++ {
-		res, err := g.search(ctx, q, 100, after)
+		res, err := g.search(ctx, q, 100, after, fields)
 		if err != nil && page > 0 {
-			res, err = g.search(ctx, q, 100, after) // big result pages get the odd 502
+			res, err = g.search(ctx, q, 100, after, fields) // big result pages get the odd 502
 		}
 		if err != nil && page > 0 {
 			return all, nil // keep the pages we have rather than drop them all
@@ -133,8 +206,8 @@ func (g *GitHubForge) searchAll(ctx context.Context, q string) (*ghSearch, error
 	return all, nil
 }
 
-func (g *GitHubForge) search(ctx context.Context, q string, first int, after string) (*ghSearch, error) {
-	query := fmt.Sprintf(`query($q: String!, $after: String) { viewer { login } search(query: $q, type: ISSUE, first: %d, after: $after) { issueCount pageInfo { hasNextPage endCursor } nodes { ... on PullRequest { %s } } } }`, first, ghPRFields)
+func (g *GitHubForge) search(ctx context.Context, q string, first int, after, fields string) (*ghSearch, error) {
+	query := fmt.Sprintf(`query($q: String!, $after: String) { viewer { login } search(query: $q, type: ISSUE, first: %d, after: $after) { issueCount pageInfo { hasNextPage endCursor } nodes { ... on PullRequest { %s } } } }`, first, fields)
 	args := []string{"api", "graphql", "--hostname", g.host, "-f", "q=" + q, "-f", "query=" + query}
 	if after != "" {
 		args = append(args, "-f", "after="+after)

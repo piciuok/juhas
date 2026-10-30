@@ -31,6 +31,8 @@ type Item struct {
 
 	Files *Files `json:"files,omitempty"` // nil = not fetched
 
+	Ready *Ready `json:"ready,omitempty"` // only for my own PR/MRs (Mine)
+
 	State string `json:"state,omitempty"` // StateOpen | StateMerged | StateClosed ("" = not known)
 
 	// DecideSHA, when set, is the commit an approval is for (publishing
@@ -65,6 +67,26 @@ func normState(s string) string {
 	}
 	return ""
 }
+
+// Ready is how far one of my PR/MRs is from being merged.
+type Ready struct {
+	Review    string    `json:"review,omitempty"` // ReviewApproved | ReviewChanges | ReviewRequired | ""
+	Approvals int       `json:"approvals,omitempty"`
+	CI        string    `json:"ci,omitempty"` // CIPassed | CIFailed | CIRunning | "" (none)
+	Conflicts bool      `json:"conflicts,omitempty"`
+	Threads   bool      `json:"threads,omitempty"` // unresolved discussions
+	Detail    string    `json:"detail,omitempty"`  // GitLab detailed_merge_status
+	Updated   time.Time `json:"updated"`
+}
+
+const (
+	ReviewApproved = "approved"
+	ReviewChanges  = "changes_requested"
+	ReviewRequired = "review_required"
+	CIPassed       = "passed"
+	CIFailed       = "failed"
+	CIRunning      = "running"
+)
 
 // Files counts the changed files of a PR/MR by kind.
 type Files struct {
@@ -126,6 +148,8 @@ type Forge interface {
 	// Projects lists the projects I am a member of, recently active first
 	// and filtered by search when set (paths without host): to pin one.
 	Projects(ctx context.Context, search string) ([]string, error)
+	// Mine lists my own open PR/MRs across the host, with how ready they are.
+	Mine(ctx context.Context) ([]Item, error)
 }
 
 // ParseURL extracts platform, repo key and number from a PR/MR web URL:

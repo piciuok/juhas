@@ -66,6 +66,9 @@ type Snapshot struct {
 	Entries []Entry    `json:"entries"`
 	Repos   []RepoStat `json:"repos"`
 	Errors  []string   `json:"errors"`
+	// Mine are my own open PR/MRs across every account, with how ready they
+	// are to merge (no review, just a look).
+	Mine []forge.Item `json:"mine"`
 }
 
 // UrgentCount is the number of urgent entries.
@@ -183,6 +186,8 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 		}
 	}
 
+	snap.Mine = c.mine(ctx, snap)
+
 	openAll := map[string][]Open{}
 	for _, key := range c.Cfg.RepoKeys() {
 		s, err := c.Cfg.Effective(key)
@@ -293,6 +298,39 @@ func (c *Collector) Collect(ctx context.Context) *Snapshot {
 		return a.Number > b.Number
 	})
 	return snap
+}
+
+// mine collects my PR/MRs from every account (also unwatched ones: they are
+// still mine), newest activity first. A failing account is reported and
+// skipped.
+func (c *Collector) mine(ctx context.Context, snap *Snapshot) []forge.Item {
+	seen := map[string]bool{}
+	out := []forge.Item{}
+	for _, k := range c.order() {
+		items, err := c.Forges[k].Mine(ctx)
+		if err != nil {
+			snap.Errors = append(snap.Errors, "my PR/MRs: "+err.Error())
+		}
+		for _, it := range items {
+			if seen[it.URL] {
+				continue
+			}
+			seen[it.URL] = true
+			if key, ok := c.Cfg.RepoKey(it.Repo); ok {
+				it.Repo = key
+			}
+			out = append(out, it)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return updated(out[i]).After(updated(out[j])) })
+	return out
+}
+
+func updated(it forge.Item) time.Time {
+	if it.Ready != nil && !it.Ready.Updated.IsZero() {
+		return it.Ready.Updated
+	}
+	return it.CreatedAt
 }
 
 // logins are "host login" of every account, watched or not: a PR authored

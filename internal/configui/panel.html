@@ -37,6 +37,7 @@ nav.tabs button.on { color: var(--text); font-weight: 600; border-bottom-color: 
 nav.tabs .n { font-size: 11.5px; font-weight: 600; min-width: 18px; padding: 0 6px; border-radius: 9px; background: var(--chip); color: var(--text); text-align: center; }
 nav.tabs .n.decide { background: var(--accent); color: #fff; }
 nav.tabs .n.urgent { background: var(--volt); color: #2b1d00; }
+nav.tabs .n.ok { background: var(--ok); color: #fff; }
 nav.tabs .sep { flex: 1; min-width: 12px; }
 
 button, .btn { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
@@ -102,6 +103,8 @@ button.group:hover { color: var(--text); }
 .row[data-s=changes] .chip { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
 .row[data-s=done] .title a, .row[data-s=approved] .title a, .row[data-s=changes] .title a, .row[data-s=skipped] .title a, .row.other .title a { font-weight: 400; }
 .row[data-s=skipped] { opacity: .6; }
+.row[data-s=draft] .chip { border-style: dashed; }
+.row[data-s=queued] .chip { color: var(--text); }
 .row.urgent { --stripe: var(--volt); }
 @keyframes pulse { 50% { opacity: .45; } }
 
@@ -224,7 +227,9 @@ const shortErr = (s) => (s || "").replace(/\s*\(log: [^)]*\)/g, "").replace(/^cl
 // A row is in exactly one state and says whose move it is: yours, the
 // agent's or the author's. Rows are listed in the state's order (n).
 const YOU = "you", AGENT = "agent", AUTHOR = "author", NOBODY = "";
-const MOVE = { [YOU]: ["your move", true], [AGENT]: ["the agent is on it", false], [AUTHOR]: ["the author's move", false] };
+const REVIEWERS = "reviewers", CI = "ci";
+const MOVE = { [YOU]: ["your move", true], [AGENT]: ["the agent is on it", false], [AUTHOR]: ["the author's move", false],
+  [REVIEWERS]: ["the reviewers' move", false], [CI]: ["waiting for CI", false] };
 
 function entryState(e) {
   const p = e.proposal;
@@ -358,6 +363,50 @@ function otherRow(o) {
     !o.clone ? h("span", { class: "muted" }, "no local clone — can't review here") : null] });
 }
 
+// ---- my PR/MRs ---------------------------------------------------------------
+// mineState: how far one of my PR/MRs is from merging, the blocker first.
+function mineState(x) {
+  const r = x.ready || {};
+  if (x.draft) return { k: "draft", n: 5, label: "✎ Draft", who: YOU };
+  if (r.conflicts) return { k: "failed", n: 0, label: "⚠ Conflicts", who: YOU };
+  if (r.ci === "failed") return { k: "failed", n: 0, label: "✕ CI failing", who: YOU };
+  if (r.review === "changes_requested") return { k: "stale", n: 1, label: "✎ Changes requested", who: YOU };
+  if (r.threads) return { k: "stale", n: 1, label: "💬 Open threads", who: YOU };
+  if (r.ci === "running") return { k: "running", n: 3, label: "● CI running", who: CI };
+  if (r.review === "review_required") return { k: "queued", n: 4, label: "⏳ Waiting for review", who: REVIEWERS };
+  if (r.review === "approved" || r.detail === "mergeable") return { k: "approved", n: 2, label: "✓ Ready to merge", who: YOU };
+  return { k: "new", n: 4, label: "Open", who: REVIEWERS };
+}
+const mineNeedsYou = (m) => (m.mine || []).filter((x) => { const s = mineState(x); return s.who === YOU && s.k !== "draft" && s.k !== "approved"; }).length;
+const mineReady = (m) => (m.mine || []).filter((x) => mineState(x).k === "approved").length;
+
+function mineView(m) {
+  const list = [...(m.mine || [])].sort((a, b) => mineState(a).n - mineState(b).n);
+  if (!list.length) return h("div", { class: "empty" }, m.polled_at ? "You have no open PR/MRs." : "First check in progress…");
+  const counts = {};
+  for (const x of list) { const l = mineState(x).label.replace(/^\S+ /, ""); counts[l] = (counts[l] || 0) + 1; }
+  return h("section", { class: "card" },
+    h("div", { class: "card-head" }, h("span", { class: "name" }, "My open PR/MRs — every project"),
+      h("span", { class: "sub" }, Object.entries(counts).map(([l, n]) => `${n} ${l.toLowerCase()}`).join(" · "))),
+    list.map((x) => {
+      const r = x.ready || {};
+      const s = mineState(x);
+      return row({ s, ref: `${x.repo} ${x.ref}`, title: x.title, url: x.url,
+        main: [link("soft wide", x.url, "↗ Open", "Open it on the forge")],
+        menu: more("m:" + x.url, []),
+        meta: [
+          x.target ? h("span", { class: "tag", title: "target branch" }, "→ " + x.target) : null,
+          r.review === "approved" ? h("span", { style: "color:var(--ok)" }, "✓ " + (r.approvals > 1 ? `${r.approvals} approvals` : "approved"))
+            : r.approvals ? h("span", {}, `${r.approvals} approval${r.approvals > 1 ? "s" : ""}`) : null,
+          r.review === "changes_requested" ? h("span", { class: "why" }, "changes requested") : null,
+          r.ci === "passed" ? h("span", { style: "color:var(--ok)" }, "CI ✓") : r.ci === "failed" ? h("span", { class: "err" }, "CI ✕") : r.ci === "running" ? h("span", {}, "CI running") : null,
+          r.conflicts ? h("span", { class: "err" }, "conflicts") : null,
+          r.threads ? h("span", { class: "why" }, "unresolved threads") : null,
+          h("span", { class: "muted" }, "opened " + x.age + (x.updated ? " · active " + x.updated : "")),
+        ] });
+    }));
+}
+
 // ---- tabs -------------------------------------------------------------------
 // One tab per project (counting what waits for you), then the history, the
 // worktrees and pinning. The choice is kept per browser.
@@ -366,7 +415,7 @@ function otherRow(o) {
 let want = store.get("tab", ""), tab = want;
 const hashTab = { "#history": "history", "#pin": "pin", "#worktrees": "trees" }[location.hash];
 if (hashTab) { want = tab = hashTab; history.replaceState(null, "", location.pathname + location.search); }
-const SPECIAL = ["history", "trees", "pin"];
+const SPECIAL = ["mine", "history", "trees", "pin"];
 
 const visibleRepos = (m) => (m.repos || []).filter((r) => r.entries.length || r.pinned);
 function repoCounts(r) {
@@ -375,14 +424,17 @@ function repoCounts(r) {
 }
 function fixTab(m) {
   const keys = visibleRepos(m).map((r) => "repo:" + r.key);
-  tab = keys.includes(want) || SPECIAL.includes(want) ? want : keys[0] || (m.polled_at ? "history" : "");
+  tab = keys.includes(want) || SPECIAL.includes(want) ? want : (m.mine || []).length ? "mine" : keys[0] || (m.polled_at ? "history" : "");
 }
 function setTab(key) { want = key; store.set("tab", key); menuOpen = null; render(M, true); }
 
 function renderTabs(m) {
   const t = (key, label, ...badges) => h("button", { class: key === tab ? "on" : "", onclick: () => setTab(key) }, label, ...badges);
   const n = (v, cls = "", title) => v ? h("span", { class: "n " + cls, title }, v) : null;
+  const mine = (m.mine || []).length, needs = mineNeedsYou(m), ready = mineReady(m);
   $("#tabs").replaceChildren(
+    t("mine", "👤 My PR/MRs", needs ? n("⚠" + needs, "urgent", "need you: CI, conflicts, changes requested or threads") : null,
+      ready ? n("✓" + ready, "ok", "ready to merge") : null, h("span", { class: "n", title: "open" }, mine)),
     ...visibleRepos(m).map((r) => {
       const c = repoCounts(r);
       return t("repo:" + r.key, (r.pinned ? "📌 " : "") + r.short,
@@ -529,9 +581,9 @@ function render(m, force) {
   fixTab(m);
   const repo = visibleRepos(m).find((r) => "repo:" + r.key === tab);
   const parts = {
-    head: JSON.stringify({ ...m, repos: null, history: null, worktrees: null }),
-    tabs: JSON.stringify([tab, visibleRepos(m).map((r) => [r.key, r.short, r.pinned, repoCounts(r)]), (m.history || []).length, (m.worktrees || []).length]),
-    view: JSON.stringify([tab, tab === "history" ? m.history : tab === "trees" ? [m.worktrees, m.keep_for] : tab === "pin" ? null : repo, !!m.polled_at]),
+    head: JSON.stringify({ ...m, repos: null, history: null, worktrees: null, mine: null }),
+    tabs: JSON.stringify([tab, visibleRepos(m).map((r) => [r.key, r.short, r.pinned, repoCounts(r)]), (m.history || []).length, (m.worktrees || []).length, (m.mine || []).length, mineNeedsYou(m), mineReady(m)]),
+    view: JSON.stringify([tab, tab === "mine" ? m.mine : tab === "history" ? m.history : tab === "trees" ? [m.worktrees, m.keep_for] : tab === "pin" ? null : repo, !!m.polled_at]),
   };
   const changed = (k) => force || parts[k] !== last[k];
   if (changed("head")) renderHead(m);
@@ -543,7 +595,8 @@ function render(m, force) {
 function renderView(m) {
   if (tab === "pin") { showPin(); if (pinList == null && !pinLoading) searchPins(); return; }
   let v;
-  if (tab === "history") v = historyView(m);
+  if (tab === "mine") v = mineView(m);
+  else if (tab === "history") v = historyView(m);
   else if (tab === "trees") v = treesView(m);
   else {
     const r = visibleRepos(m).find((x) => "repo:" + x.key === tab);

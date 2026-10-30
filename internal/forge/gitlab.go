@@ -51,6 +51,11 @@ type glMR struct {
 	References   struct {
 		Full string `json:"full"`
 	} `json:"references"`
+	// for my own MRs (Mine)
+	DetailedStatus string    `json:"detailed_merge_status"`
+	HasConflicts   bool      `json:"has_conflicts"`
+	Discussions    *bool     `json:"blocking_discussions_resolved"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 func (g *GitLabForge) api(ctx context.Context, path string, v any) error {
@@ -335,6 +340,57 @@ func (g *GitLabForge) Get(ctx context.Context, project string, number int) (Item
 	err = g.fillApprovals(ctx, items, me)
 	g.fillFiles(ctx, items)
 	return items[0], err
+}
+
+// Mine lists my open MRs, with approvals, pipeline, conflicts and threads.
+// GitLab sums most of it up in detailed_merge_status (15.6+); approvals take
+// one call per MR, and there are few of mine.
+func (g *GitLabForge) Mine(ctx context.Context) ([]Item, error) {
+	me, err := g.Me(ctx)
+	if err != nil {
+		return nil, err
+	}
+	mrs, err := g.mrs(ctx, fmt.Sprintf("merge_requests?author_username=%s&state=opened&scope=all", url.QueryEscape(me)))
+	if err != nil {
+		return nil, err
+	}
+	items := make([]Item, 0, len(mrs))
+	for _, mr := range mrs {
+		it := g.item(mr, me)
+		r := &Ready{Updated: mr.UpdatedAt, Conflicts: mr.HasConflicts, Detail: mr.DetailedStatus,
+			Threads: mr.Discussions != nil && !*mr.Discussions}
+		switch mr.DetailedStatus {
+		case "ci_must_pass":
+			r.CI = CIFailed
+		case "ci_still_running":
+			r.CI = CIRunning
+		case "conflict", "need_rebase":
+			r.Conflicts = true
+		case "discussions_not_resolved":
+			r.Threads = true
+		}
+		var ap struct {
+			ApprovedBy []struct {
+				User glUser `json:"user"`
+			} `json:"approved_by"`
+			Left *int `json:"approvals_left"`
+		}
+		_, project := SplitKey(it.Repo)
+		if g.api(ctx, fmt.Sprintf("projects/%s/merge_requests/%d/approvals", url.PathEscape(project), it.Number), &ap) == nil {
+			r.Approvals = len(ap.ApprovedBy)
+		}
+		switch {
+		case mr.DetailedStatus == "requested_changes":
+			r.Review = ReviewChanges
+		case mr.DetailedStatus == "not_approved" || (ap.Left != nil && *ap.Left > 0):
+			r.Review = ReviewRequired
+		case r.Approvals > 0:
+			r.Review = ReviewApproved
+		}
+		it.Ready = r
+		items = append(items, it)
+	}
+	return items, nil
 }
 
 // Projects lists the projects I am a member of (up to 50), recently active first.
