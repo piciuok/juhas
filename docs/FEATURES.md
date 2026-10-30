@@ -173,8 +173,9 @@ configuration reference.
   - acknowledge urgent items;
   - map a clone for a repo without one;
   - un-skip;
-  - pin a project (search your projects or paste a URL), fold or list a repo's other PR/MRs, and review one
-    of them although nobody asked you;
+  - pin a project (search your projects or paste a URL), and review one of a project's other PR/MRs although
+    nobody asked you (they sit in a foldable group under the project's list, unfolded by default when its
+    `show_all` is `inline`; drafts in a group of their own);
   - *☀️ Work now* outside working hours;
   - update.
 

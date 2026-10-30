@@ -397,37 +397,32 @@ function renderTabs(m) {
 }
 
 // ---- views ------------------------------------------------------------------
-// shown: projects whose "other PR/MRs" group is unfolded.
-const shown = new Set(store.get("open", []));
+// fold: groups you folded or unfolded, by "<project> others|drafts"; the
+// default is the project's show_all for the others, folded for drafts.
+const fold = store.get("fold", {});
+function group(key, label, rows, def) {
+  if (!rows.length) return [];
+  const open = key in fold ? fold[key] : def;
+  return [h("button", { class: "group", title: open ? "Fold" : "Unfold", onclick: () => { fold[key] = !open; store.set("fold", fold); render(M, true); } },
+    (open ? "▾ " : "▸ ") + label + ` (${rows.length})`), ...(open ? rows : [])];
+}
 
 function repoView(r) {
   const ready = r.entries.filter((e) => !e.draft).sort((a, b) => (b.urgent - a.urgent) || (entryState(a).n - entryState(b).n));
   const myDrafts = r.entries.filter((e) => e.draft);
-  const others = r.all.filter((o) => !o.queued);
-  const inline = r.inline ? others.filter((o) => !o.draft) : [];
-  const folded = r.inline ? others.filter((o) => o.draft) : others;
-  const tools = [];
-  if (r.all.length) tools.push(h("button", { title: r.inline ? "Fold the PR/MRs not waiting for you" : "List the PR/MRs not waiting for you right here (drafts stay folded)",
-    onclick: () => act("show_all", { url: r.key, on: !r.inline }) }, r.inline ? "↕ Fold the others" : "↕ List the others"));
-  tools.push(h("button", { title: r.pinned ? "Show the project only when something waits for you" : "Always show the project, with all its PR/MRs",
-    onclick: () => act(r.pinned ? "unpin" : "pin", { url: r.key }) }, r.pinned ? "📌 Unpin" : "📌 Pin"));
+  const others = r.all.filter((o) => !o.queued && !o.draft);
+  const drafts = r.all.filter((o) => !o.queued && o.draft);
   const card = h("section", { class: "card" },
     h("div", { class: "card-head" },
       h("a", { class: "name", href: r.list_url, target: "_blank", rel: "noopener", title: "Open the list on the forge" }, r.key),
       h("span", { class: "sub" }, [r.open >= 0 ? `${r.open} open` : null, `${ready.length} for you`, r.mode === "open" ? "all open PR/MRs" : "where you are asked"].filter(Boolean).join(" · ")),
-      h("span", { class: "tools" }, tools)),
+      h("span", { class: "tools" }, h("button", { title: r.pinned ? "Show the project only when something waits for you" : "Always show the project, with all its PR/MRs",
+        onclick: () => act(r.pinned ? "unpin" : "pin", { url: r.key }) }, r.pinned ? "📌 Unpin" : "📌 Pin"))),
     ready.map(entryRow));
   if (!ready.length) card.append(h("div", { class: "none" }, "✓ Nothing ready waits for you here" + (r.open === 0 ? " — no open PR/MRs" : "")));
-  if (inline.length) card.append(h("div", { class: "group" }, `Other open PR/MRs — not for you (${inline.length})`), ...inline.map(otherRow));
-  const n = myDrafts.length + folded.length;
-  if (n) {
-    const open = shown.has(r.key);
-    const drafts = myDrafts.length + folded.filter((o) => o.draft).length;
-    const what = r.inline ? `Drafts (${n})` : `Other open PR/MRs (${n})` + (drafts ? ` · ${drafts} draft` : "");
-    card.append(h("button", { class: "group", onclick: () => { open ? shown.delete(r.key) : shown.add(r.key); store.set("open", [...shown]); render(M, true); } },
-      (open ? "▾ " : "▸ ") + what));
-    if (open) card.append(...myDrafts.map(entryRow), ...folded.map(otherRow));
-  }
+  card.append(
+    ...group(r.key + " others", "Other open PR/MRs — not for you", others.map(otherRow), r.inline),
+    ...group(r.key + " drafts", "Drafts", [...myDrafts.map(entryRow), ...drafts.map(otherRow)], false));
   return card;
 }
 
