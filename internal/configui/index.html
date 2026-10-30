@@ -423,7 +423,33 @@ function viewGlobal(v) {
     if (!g) groups.push((g = { name, fields: [] }));
     g.fields.push(f);
   }
+  v.append(machineCard());
   for (const g of groups) v.append(h("div", { class: "card" }, h("h3", {}, g.name), g.fields.map(globalRow)));
+}
+
+// machineCard: what belongs to this computer rather than to the config file
+// (start at login) and a preview of the kick. They go through the tray app,
+// so they work while its icon is running.
+function machineCard() {
+  const note = h("div", { class: "help" });
+  const auto = h("input", { type: "checkbox", disabled: true });
+  const zap = h("button", { disabled: true, title: "Show the on-screen kick now" }, "⚡ Preview the kick");
+  const card = h("div", { class: "card" }, h("h3", {}, "On this computer"),
+    h("div", { class: "row" }, h("label", { class: "name" }, "Start at login"),
+      h("div", {}, h("label", {}, auto, " start Juhas when you log in"), h("div", { class: "help" }, "macOS: a LaunchAgent; Linux: an autostart entry."))),
+    h("div", { class: "row" }, h("label", { class: "name" }, "Screen kick"),
+      h("div", {}, zap, h("div", { class: "help" }, "Turn it on or off in “Screen kick” below."), note)));
+  api("/api/panel").then((m) => {
+    auto.checked = !!m.autostart; auto.disabled = false; zap.disabled = false;
+  }).catch(() => { note.textContent = "These work while the Juhas tray icon is running."; });
+  auto.addEventListener("change", async () => {
+    auto.disabled = true;
+    try { await api("/api/panel/do", { action: "autostart", on: auto.checked }); }
+    catch (e) { auto.checked = !auto.checked; setStatus("start at login: " + e.message, "err"); }
+    auto.disabled = false;
+  });
+  zap.addEventListener("click", () => api("/api/panel/do", { action: "zap" }).catch((e) => setStatus("kick: " + e.message, "err")));
+  return card;
 }
 
 // ---- accounts ----------------------------------------------------------------

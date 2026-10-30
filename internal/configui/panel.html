@@ -21,15 +21,15 @@ a { color: var(--accent); }
 
 /* header: status pills and tools, then the tabs */
 header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
-.bar { padding: 10px 20px 8px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; max-width: 1180px; margin: 0 auto; }
+.bar { padding: 10px 20px 8px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; max-width: 1600px; margin: 0 auto; }
 header h1 { margin: 0; font-size: 16px; display: flex; gap: 8px; align-items: center; }
 .stats { display: flex; gap: 6px; flex-wrap: wrap; }
 .pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 12px; background: var(--chip); font-size: 12.5px; white-space: nowrap; }
 .pill.urgent { background: color-mix(in srgb, var(--volt) 25%, transparent); font-weight: 600; }
 .pill.live { color: var(--accent); }
 .spacer { flex: 1; }
-.tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-nav.tabs { display: flex; gap: 2px; padding: 0 20px; max-width: 1180px; margin: 0 auto; overflow-x: auto; scrollbar-width: none; }
+.tools { display: flex; gap: 6px; flex-wrap: nowrap; align-items: center; }
+nav.tabs { display: flex; gap: 2px; padding: 0 20px; max-width: 1600px; margin: 0 auto; overflow-x: auto; scrollbar-width: none; }
 nav.tabs::-webkit-scrollbar { display: none; }
 nav.tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 7px 12px 8px; color: var(--muted); font-size: 13.5px; gap: 6px; }
 nav.tabs button:hover { color: var(--text); border-bottom-color: var(--line); }
@@ -47,7 +47,7 @@ button:hover, .btn:hover { border-color: var(--accent); }
 button.volt { background: var(--volt); border-color: var(--volt); color: #2b1d00; font-weight: 600; }
 button:disabled { opacity: .5; cursor: default; }
 label.toggle { display: inline-flex; gap: 5px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; }
-main { padding: 16px 20px 60px; max-width: 1180px; margin: 0 auto; }
+main { padding: 16px 20px 60px; max-width: 1600px; margin: 0 auto; }
 #notice { display: none; margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--err); color: var(--err); }
 .errors { margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--warn); color: var(--warn); font-size: 13px; }
 .muted { color: var(--muted); }
@@ -135,6 +135,7 @@ section.pin input { width: 100%; font: inherit; padding: 6px 10px; border-radius
   .actions { justify-content: flex-start; }
   .actions .main { flex: none; justify-content: flex-start; }
   details.more .menu { left: 0; right: auto; }
+  .tools { flex-wrap: wrap; }
   .bar { padding: 10px 16px 6px; } nav.tabs { padding: 0 16px; } main { padding: 12px 16px 40px; }
 }
 </style>
@@ -146,9 +147,6 @@ section.pin input { width: 100%; font: inherit; padding: 6px 10px; border-radius
     <div class="stats" id="stats"></div>
     <span class="spacer"></span>
     <div class="tools">
-      <label class="toggle" title="New urgent PR/MR: lightning on screen and a loud notification"><input type="checkbox" id="tgZap"> ⚡ kick</label>
-      <button id="btnZap" title="Show the effect">⚡ test</button>
-      <label class="toggle"><input type="checkbox" id="tgAuto"> start at login</label>
       <button id="btnPoll" title="Manual check: also asks about PR/MRs you skipped (same head)">🔄 Check now</button>
       <button id="btnBriefs">📁 Briefs</button>
       <button id="btnSettings">⚙️ Settings</button>
@@ -577,14 +575,9 @@ function renderHead(m) {
     m.update && m.update.latest && !m.update.installing ? h("button", { class: "primary", title: `You have ${m.update.current}`, onclick: () => act("update") }, `⬆ Update to ${m.update.latest}`) : null,
     m.update && m.update.latest && !m.update.installing ? h("a", { class: "btn", href: m.update.url, target: "_blank", rel: "noopener" }, "What's new") : null,
     m.unacked ? h("button", { class: "volt", onclick: () => act("ack") }, `🔕 Acknowledge urgent (${m.unacked})`) : null].filter(Boolean));
-  $("#tgZap").checked = m.screen_effect;
-  $("#tgAuto").checked = m.autostart;
   $("#errors").replaceChildren(...(m.errors.length ? [h("div", { class: "errors" }, "⚠ Fetch errors: ", m.errors.join(" · "))] : []));
 }
 
-$("#tgZap").addEventListener("change", (e) => act("screen_effect", { on: e.target.checked }));
-$("#tgAuto").addEventListener("change", (e) => act("autostart", { on: e.target.checked }));
-$("#btnZap").addEventListener("click", () => act("zap"));
 $("#btnPoll").addEventListener("click", () => act("poll"));
 $("#btnBriefs").addEventListener("click", () => act("briefs"));
 $("#btnSettings").addEventListener("click", () => act("settings"));

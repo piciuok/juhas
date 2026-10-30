@@ -164,14 +164,18 @@ configuration reference.
   - per-item actions: review with Claude or Codex, cancel, skip, open the brief, open the PR/MR;
   - *Check now*, Diagnostics, Settings, the briefs folder, Start at login, the on-screen kick toggle, and
     *Check for updates*.
-- **Panel:** a browser page with the same queue that stays open while you click. Its extra actions:
+- **Panel:** a browser page with the same queue that stays open while you click. A tab per project counts
+  what waits for you (📝 decisions, ⚡ urgent); History, Worktrees and Pin a project have their own tabs.
+  Every row has the same columns in any state: the state and whose move it is (yours, the agent's, the
+  author's), the title and details, then one main action (Decide, Review, Retry, Live view…) and a ⋯ menu with
+  the rest. Rows needing you come first. Start at login and the kick preview are in Settings → General.
+  Its extra actions:
   - acknowledge urgent items;
   - map a clone for a repo without one;
   - un-skip;
   - pin a project (search your projects or paste a URL), fold or list a repo's other PR/MRs, and review one
     of them although nobody asked you;
   - *☀️ Work now* outside working hours;
-  - preview the kick;
   - update.
 
 ## Settings
