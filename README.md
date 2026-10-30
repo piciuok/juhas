@@ -27,12 +27,25 @@ comments; you accept, edit or reject each one, and Juhas publishes the accepted 
   suggests goes into the proposal with one click.
 - **Read-only guard** — reviews may read anything (gh/glab, Jira or docs through MCP) but not push, comment or edit;
   tune it with exceptions or turn it off per repo.
-- **Live run log**, briefs as Markdown files, and a browser **Panel** that stays open while you click.
+- **Live run log**, briefs as Markdown files, and a browser **Panel** that stays open while you click —
+  a tab per project, plus **👤 My PR/MRs**: your own open PR/MRs everywhere and how ready they are to merge.
 - **Plan limits** — how much of the Claude and Codex 5-hour and weekly windows is used, in one line of the menu.
 - **Several accounts** — work and personal GitHub logins (and GitLab ones) side by side, each acting as itself.
 - **Settings UI** over a plain JSON file: global defaults, per-repo overrides, folder picker, repo auto-mapping.
 - **Diagnostics** for every CLI it needs (versions, logins), with copy-paste fixes.
 - **Self-updating** from GitHub releases, with checksum verification.
+
+<p align="center"><img src="docs/screenshots/panel.jpg" alt="The Panel: a tab per project, each PR/MR with its state, whose move it is and one main action" width="900"></p>
+
+<table><tr>
+<td width="50%"><img src="docs/screenshots/review-chat.jpg" alt="A review proposal with the file diff next to a comment, and the chat about the review on the right"></td>
+<td width="50%"><img src="docs/screenshots/my-prs.jpg" alt="My PR/MRs: your own open PR/MRs across every project and how ready they are"></td>
+</tr><tr>
+<td align="center"><sub>Decide on the proposed comments, see the diff, ask the agent</sub></td>
+<td align="center"><sub>Your own PR/MRs across every project</sub></td>
+</tr></table>
+
+<sub>Screenshots use made-up projects, people and tickets.</sub>
 
 All features: [docs/FEATURES.md](docs/FEATURES.md).
 

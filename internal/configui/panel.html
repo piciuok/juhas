@@ -387,7 +387,7 @@ function mineView(m) {
   for (const x of list) { const l = mineState(x).label.replace(/^\S+ /, ""); counts[l] = (counts[l] || 0) + 1; }
   return h("section", { class: "card" },
     h("div", { class: "card-head" }, h("span", { class: "name" }, "My open PR/MRs — every project"),
-      h("span", { class: "sub" }, Object.entries(counts).map(([l, n]) => `${n} ${l.toLowerCase()}`).join(" · "))),
+      h("span", { class: "sub" }, Object.entries(counts).map(([l, n]) => `${n} ${l.startsWith("CI") ? l : l.toLowerCase()}`).join(" · "))),
     list.map((x) => {
       const r = x.ready || {};
       const s = mineState(x);
