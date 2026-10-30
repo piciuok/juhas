@@ -38,6 +38,11 @@ main { max-width: 980px; margin: 0 auto; padding: 16px 20px 80px; }
 .sev { font-size: 11.5px; padding: 1px 7px; border-radius: 9px; background: var(--chip); }
 .sev.BLOCK, .sev.high { color: var(--err); } .sev.WARN, .sev.medium { color: var(--warn); }
 .spacer { flex: 1; }
+.foot { display: flex; gap: 12px; align-items: flex-start; margin-top: 8px; }
+.foot .notes { flex: 1; min-width: 0; }
+.foot .notes .note:first-child { margin-top: 2px; }
+.foot .acts { display: flex; gap: 6px; flex: none; }
+@media (max-width: 600px) { .foot { flex-direction: column-reverse; } }
 textarea { width: 100%; min-height: 70px; font: 13.5px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, sans-serif; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--input); color: var(--text); resize: vertical; }
 textarea:disabled { border-style: dashed; color: var(--muted); }
 .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
@@ -255,21 +260,26 @@ function card(c) {
   ta.addEventListener("input", () => { c.body = ta.value; save(); });
   const set = (st) => { c.status = c.status === st ? "pending" : st; save(); render(); };
   const loc = c.id === "summary" ? "General comment" : (c.line > 0 ? `${c.file}:${c.line}` : c.file);
+  // the file path may be long: it wraps on its own line, and the actions sit
+  // at the bottom right, where nothing else competes for the space
+  const notes = [
+    posted ? h("div", { class: "note" }, "published: ", h("a", { href: c.posted, target: "_blank", rel: "noopener" }, "view in PR/MR"), c.note ? " · " + c.note : "") : null,
+    c.status === "failed" ? h("div", { class: "note err" }, c.error || "error") : null,
+    c.status === "rejected" && c.note ? h("div", { class: "note" }, c.note + " — accept it to publish it anyway") : null,
+    !posted && c.status !== "rejected" ? h("div", { class: "note" }, "You can edit the text before accepting; it saves automatically.") : null];
   return h("div", { class: "card " + c.status },
     h("div", { class: "top" },
       h("span", { class: "loc" }, loc),
       c.severity ? h("span", { class: "sev " + c.severity }, c.severity) : null,
-      h("span", { class: "sev" }, LABEL[c.status] || c.status),
-      h("span", { class: "spacer" }),
-      c.file ? h("button", { title: "Show the file next to the comment", class: views[c.id] ? "on" : "", onclick: () => { views[c.id] = views[c.id] ? null : "diff"; render(); } }, views[c.id] ? "✕ Hide file" : "📄 File") : null,
-      posted ? null : h("button", { class: "ok" + (c.status === "accepted" ? " on" : ""), onclick: () => set("accepted") }, "✓ Accept"),
-      posted ? null : h("button", { class: "no" + (c.status === "rejected" ? " on" : ""), onclick: () => set("rejected") }, "✕ Reject")),
+      h("span", { class: "sev" }, LABEL[c.status] || c.status)),
     c.file && views[c.id] ? preview(c) : null,
     ta,
-    posted ? h("div", { class: "note" }, "published: ", h("a", { href: c.posted, target: "_blank", rel: "noopener" }, "view in PR/MR"), c.note ? " · " + c.note : "") : null,
-    c.status === "failed" ? h("div", { class: "note err" }, c.error || "error") : null,
-    c.status === "rejected" && c.note ? h("div", { class: "note" }, c.note + " — accept it to publish it anyway") : null,
-    !posted && c.status !== "rejected" ? h("div", { class: "note" }, "You can edit the text before accepting; it saves automatically.") : null);
+    h("div", { class: "foot" },
+      h("div", { class: "notes" }, notes),
+      h("div", { class: "acts" },
+        c.file ? h("button", { title: "Show the file next to the comment", class: views[c.id] ? "on" : "", onclick: () => { views[c.id] = views[c.id] ? null : "diff"; render(); } }, views[c.id] ? "✕ Hide file" : "📄 File") : null,
+        posted ? null : h("button", { class: "ok" + (c.status === "accepted" ? " on" : ""), onclick: () => set("accepted") }, "✓ Accept"),
+        posted ? null : h("button", { class: "no" + (c.status === "rejected" ? " on" : ""), onclick: () => set("rejected") }, "✕ Reject"))));
 }
 
 function verdict() {
